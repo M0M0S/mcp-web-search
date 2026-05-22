@@ -1622,7 +1622,7 @@ wheels = [
 
 [[package]]
 name = "mcp-webs"
-version = "1.0.2"
+version = "1.0.3"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

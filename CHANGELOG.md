@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-05-22
+
+### Changed
+- PyPI long description: added `readme = "README.md"` в `pyproject.toml`
+
+---
+
 ## [1.0.2] - 2026-05-22
 
 ### Changed

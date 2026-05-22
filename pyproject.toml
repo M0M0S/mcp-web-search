@@ -7,8 +7,9 @@ packages = ["app"]
 
 [project]
 name = "mcp-webs"
-version = "1.0.2"
+version = "1.0.3"
 description = "MCP Web Search service for AI ecosystem"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=3.2",
