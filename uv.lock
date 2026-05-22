@@ -1621,9 +1621,9 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-web-search"
-version = "1.0.1"
-source = { virtual = "." }
+name = "mcp-webs"
+version = "1.0.2"
+source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "bleach" },

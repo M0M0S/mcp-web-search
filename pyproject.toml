@@ -6,8 +6,8 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [project]
-name = "mcp-web-search"
-version = "1.0.1"
+name = "mcp-webs"
+version = "1.0.2"
 description = "MCP Web Search service for AI ecosystem"
 requires-python = ">=3.12"
 dependencies = [

@@ -7,8 +7,8 @@ Thank you for your interest in contributing to **MCP Web Search**. This document
 ### 1. Fork and Clone
 
 ```bash
-git clone https://github.com/M0M0S/mcp-web-search.git
-cd mcp-web-search
+git clone https://github.com/M0M0S/mcp-webs.git
+cd mcp-webs
 uv sync
 ```
 

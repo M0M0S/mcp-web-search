@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-05-22
+
+### Changed
+- PyPI package name: `mcp-web-search` → `mcp-webs` (registered on pypi.org)
+
+---
+
 ## [1.0.1] - 2026-05-22
 
 ### Fixed
@@ -32,7 +39,7 @@ All notable changes to this project will be documented in this file.
 - `pyproject.toml` version: `0.6.0` → `1.0.0`
 - `.env.example` — all secrets → placeholders, LOG_LEVEL → INFO, synced defaults with `config.py`
 - README.md — badges, install/usage/dev sections, generic clone URL
-- Docker container names: `dev-` → `mcp-web-search`
+- Docker container names: `dev-` → `mcp-webs`
 - Pre-commit hooks: `uv run` for mypy, pytest, bandit
 
 #### Removed

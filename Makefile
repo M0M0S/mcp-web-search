@@ -14,13 +14,13 @@ run: ## Запустить production сервер
 # =============================================================================
 
 docker-build: ## Собрать Docker образ
-	docker build -t mcp-web-search:latest -f docker/Dockerfile .
+	docker build -t mcp-webs:latest -f docker/Dockerfile .
 
 docker-rebuild: ## Пересобрать начисто
 	docker compose -f docker/docker-compose.dev.yml down & docker compose -f docker/docker-compose.dev.yml up -d --build
 
 docker-push: ## Отправить Docker образ в registry
-	docker push mcp-web-search:latest
+	docker push mcp-webs:latest
 
 docker-setup-env: ## Настроить .env файл для development режима
 	./docker/scripts/setup-env.sh
