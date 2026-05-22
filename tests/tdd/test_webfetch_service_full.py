@@ -88,7 +88,9 @@ class TestWebFetchStateMachineTDD:
         with patch(
             "app.services.webfetch_service.create_llm_client", return_value=mock_llm
         ):
-            service = WebFetchService(settings, MockSearchService(), None, MockRedis())
+            service = WebFetchService(
+                settings, MockSearchService(), MockContentService(), MockRedis()
+            )
 
             # After implementation: should call LLM to generate search queries
             result = await service.execute("test", "tenant-1")
@@ -110,7 +112,9 @@ class TestWebFetchStateMachineTDD:
         with patch(
             "app.services.webfetch_service.create_llm_client", return_value=mock_llm
         ):
-            service = WebFetchService(settings, MockSearchService(), None, MockRedis())
+            service = WebFetchService(
+                settings, MockSearchService(), MockContentService(), MockRedis()
+            )
 
             # After implementation: should use asyncio.gather for parallel execution
             result = await service.execute("test", "tenant-1")
@@ -170,7 +174,9 @@ class TestWebFetchJudgeVerdictTDD:
         with patch(
             "app.services.webfetch_service.create_llm_client", return_value=mock_llm
         ):
-            service = WebFetchService(settings, MockSearchService(), None, MockRedis())
+            service = WebFetchService(
+                settings, MockSearchService(), MockContentService(), MockRedis()
+            )
 
             # After implementation: should return judge verdict (pass/retry/reject)
             result = await service.execute("test", "tenant-1")
@@ -192,7 +198,9 @@ class TestWebFetchJudgeVerdictTDD:
         with patch(
             "app.services.webfetch_service.create_llm_client", return_value=mock_llm
         ):
-            service = WebFetchService(settings, MockSearchService(), None, MockRedis())
+            service = WebFetchService(
+                settings, MockSearchService(), MockContentService(), MockRedis()
+            )
 
             # After implementation: should return feature judgment with groundedness score
             result = await service.execute("test", "tenant-1")
@@ -252,7 +260,9 @@ class TestWebFetchFallbackTDD:
         with patch(
             "app.services.webfetch_service.create_llm_client", return_value=mock_llm
         ):
-            service = WebFetchService(settings, MockSearchService(), None, MockRedis())
+            service = WebFetchService(
+                settings, MockSearchService(), MockContentService(), MockRedis()
+            )
 
             # After implementation: should fallback to SearchService.search()
             result = await service.execute("test", "tenant-1")
