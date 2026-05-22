@@ -1085,7 +1085,7 @@ class TestProviderHealthProbeTavily:
         mock_client = MagicMock()
         mock_client.search = MagicMock(return_value=mock_response)
 
-        with patch("app.core.provider_registry.TavilyClient", return_value=mock_client):
+        with patch("tavily.TavilyClient", return_value=mock_client):
             probe = ProviderHealthProbe(tracker=tracker, settings=settings)
             result = await probe._probe_tavily("test probe")
 
@@ -1107,7 +1107,7 @@ class TestProviderHealthProbeTavily:
         mock_client = MagicMock()
         mock_client.search = MagicMock(side_effect=Exception("Tavily API error"))
 
-        with patch("app.core.provider_registry.TavilyClient", return_value=mock_client):
+        with patch("tavily.TavilyClient", return_value=mock_client):
             probe = ProviderHealthProbe(tracker=tracker, settings=settings)
             result = await probe._probe_tavily("test probe")
 

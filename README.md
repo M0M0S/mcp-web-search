@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-placeholder-gray.svg)](https://github.com/<username>/mcp-web-search/actions)
+[![Build Status](https://img.shields.io/badge/build-placeholder-gray.svg)](https://github.com/M0M0S/mcp-web-search/actions)
 [![ruff](https://img.shields.io/badge/lint-ruff-ff69b4.svg)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/typecheck-mypy-white.svg)](https://mypy.readthedocs.io/)
 
@@ -30,7 +30,7 @@ FastMCP (primary server)
 
 ```bash
 # Clone the repository
-git clone https://github.com/<username>/mcp-web-search.git
+git clone https://github.com/M0M0S/mcp-web-search.git
 cd mcp-web-search
 
 # Install dependencies

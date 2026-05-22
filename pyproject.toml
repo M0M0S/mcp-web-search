@@ -1,6 +1,6 @@
 [project]
 name = "mcp-web-search"
-version = "1.0.0"
+version = "1.0.1"
 description = "MCP Web Search service for AI ecosystem"
 requires-python = ">=3.12"
 dependencies = [

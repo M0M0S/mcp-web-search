@@ -20,6 +20,7 @@ from app.services.search_service import SearchService
 
 if TYPE_CHECKING:
     from app.core.dependencies import RedisClient
+    from app.core.llm_client import LLMClient
 
 logger = get_logger(__name__)
 
@@ -33,12 +34,16 @@ class WebFetchService:
         search_service: SearchService,
         content_service: ContentService,
         redis: "RedisClient",
+        llm_client: "LLMClient | None" = None,
     ):
         self.settings = settings
         self.search_service = search_service
         self.content_service = content_service
         self.redis = redis
-        self.llm = create_llm_client()
+        self.llm = llm_client or create_llm_client(
+            redis_client=getattr(self.redis, "_client", None),
+            settings=settings,
+        )
 
         # Redis-backed checkpoint store with MemorySaver fallback
         self._redis_checkpoint_store: RedisCheckpointStore = create_checkpoint_store(

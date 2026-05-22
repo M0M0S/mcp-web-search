@@ -8,7 +8,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ddgs import DDGS
-from tavily import TavilyClient
+
+# Lazy import tavily to avoid mypy import-untyped error at module level
+# TavilyClient is imported inside _probe_tavily() method only
 
 from app.core.logging import get_logger
 from app.core.metrics import (
@@ -470,6 +472,8 @@ class ProviderHealthProbe:
         api_key = self._settings._get_api_key("TAVILY_API_KEY")
         if not api_key:
             return False
+
+        from tavily import TavilyClient  # type: ignore[import-untyped]  # no official stubs
 
         client = TavilyClient(api_key=api_key)
         try:

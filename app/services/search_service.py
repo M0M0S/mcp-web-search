@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from ddgs import DDGS
-from tavily import TavilyClient
+
+# Lazy import tavily to avoid mypy import-untyped error at module level
+# TavilyClient is imported inside _search_tavily() method only
 
 from app.core.config import Provider, Settings
 from app.core.llm_client import create_llm_client
@@ -26,6 +28,7 @@ from app.models.search import (
 
 if TYPE_CHECKING:
     from app.core.dependencies import RedisClient
+    from app.core.llm_client import LLMClient
 
 
 logger = get_logger(__name__)
@@ -40,10 +43,18 @@ class SearchError(Exception):
 class SearchService:
     """Search service with fallback chain, smart filtering, and provider health tracking."""
 
-    def __init__(self, settings: Settings, redis: "RedisClient"):
+    def __init__(
+        self,
+        settings: Settings,
+        redis: "RedisClient",
+        llm_client: "LLMClient | None" = None,
+    ):
         self.settings = settings
         self.redis = redis
-        self.llm = create_llm_client()
+        self.llm = llm_client or create_llm_client(
+            redis_client=getattr(self.redis, "_client", None),
+            settings=settings,
+        )
         self._registry = ProviderRegistry(settings)
 
     @property
@@ -244,6 +255,8 @@ class SearchService:
         if not api_key:
             logger.warning(f"Provider {provider} unavailable (missing TAVILY_API_KEY)")
             return None
+
+        from tavily import TavilyClient  # type: ignore[import-untyped]  # no official stubs
 
         client = TavilyClient(api_key=api_key)
 

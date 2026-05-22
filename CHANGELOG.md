@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-05-22
+
+### Fixed
+- **CI stabilization:** resolve mypy errors (missing type stubs) и test failures (LLM_API_KEY dependency)
+- WebFetchService/SearchService: optional `llm_client` parameter для test injection
+- TavilyClient: lazy import вместо module-level для mypy `import-untyped`
+- content_service: rationale comments для `# type: ignore[import-untyped]` (bleach, readability)
+- provider_registry: rationale comment для `# type: ignore[import-untyped]` (tavily)
+- tests: shared `mock_llm_client` fixture в `fixtures.py` + patch при usage site
+- test_provider_health: correct patch target для lazy import TavilyClient (`tavily.TavilyClient`)
+- README.md: update GitHub username
+
+---
+
 ## [1.0.0] - 2026-05-22
 
 ### Public Release Preparation

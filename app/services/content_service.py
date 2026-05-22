@@ -47,8 +47,8 @@ class ContentService:
             # Extract text with fallback chain
             text = self._extract_text(content_bytes)
 
-            # Sanitize with bleach
-            from bleach import clean
+            # Sanitize with bleach (no official type stubs — https://github.com/mjpieters/bleach)
+            from bleach import clean  # type: ignore[import-untyped]
 
             sanitized = clean(text, tags=[], strip=True)
 
@@ -97,9 +97,9 @@ class ContentService:
         except Exception:
             pass
 
-        # Fallback to readability-lxml
+        # Fallback to readability-lxml (no official type stubs — py.typed marker absent)
         try:
-            from readability import Document
+            from readability import Document  # type: ignore[import-untyped]
 
             html = content_bytes.decode("utf-8")
             doc = Document(html)
