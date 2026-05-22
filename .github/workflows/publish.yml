@@ -27,7 +27,7 @@ jobs:
         run: uv pip install build
 
       - name: Build package
-        run: uvx build
+        run: uvx --from build pyproject-build
 
       - name: Publish to PyPI
         env:
