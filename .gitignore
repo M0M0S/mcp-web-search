@@ -1,0 +1,53 @@
+# Python cache and bytecode
+/__pycache__/
+__pycache__
+*.pyc
+*.pyo
+
+# Virtual environment (installed dependencies)
+/.venv/
+
+# Cache directories
+/.mypy_cache/
+/.pytest_cache/
+/.ruff_cache/
+
+# Environment files (secrets)
+/.env
+/.env.bak
+.env.local
+.env.*.bak
+
+# IDE and editor data
+.idea/
+.shelf/
+/httpRequests/
+/queries/
+/dataSources/
+/dataSources.local.xml
+*.iml
+/misc.xml
+/modules.xml
+/vcs.xml
+/workspace.xml
+/inspectionProfiles/
+
+# Docker-related
+Dockerfile*
+.dockerignore
+
+# Report and output directories
+output/
+logs/
+
+# Coverage reports
+/.coverage
+coverage.*
+/.benchmarks/
+/tmp/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.pyd

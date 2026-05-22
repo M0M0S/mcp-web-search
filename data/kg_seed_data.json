@@ -1,0 +1,42 @@
+[
+  {
+    "concept": "python",
+    "related_terms": ["programming", "language", "code", "script", "development"],
+    "confidence": 0.9
+  },
+  {
+    "concept": "ai",
+    "related_terms": ["artificial intelligence", "machine learning", "neural network", "deep learning", "LLM"],
+    "confidence": 0.95
+  },
+  {
+    "concept": "web scraping",
+    "related_terms": ["data extraction", "html parsing", "crawler", "bot", "automation"],
+    "confidence": 0.8
+  },
+  {
+    "concept": "api",
+    "related_terms": ["endpoint", "rest", "http", "request", "response"],
+    "confidence": 0.85
+  },
+  {
+    "concept": "climate",
+    "related_terms": ["weather", "environment", "global warming", "ecology", "sustainability"],
+    "confidence": 0.85
+  },
+  {
+    "concept": "biology",
+    "related_terms": ["life", "organism", "evolution", "genetics", "cell"],
+    "confidence": 0.8
+  },
+  {
+    "concept": "technology news",
+    "related_terms": ["innovation", "startup", "tech industry", "gadgets", "software"],
+    "confidence": 0.75
+  },
+  {
+    "concept": "science news",
+    "related_terms": ["research", "discovery", "experiment", "paper", "journal"],
+    "confidence": 0.75
+  }
+]
