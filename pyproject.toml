@@ -7,7 +7,7 @@ packages = ["app"]
 
 [project]
 name = "mcp-webs"
-version = "1.1.0"
+version = "1.1.1"
 description = "MCP Web Search service for AI ecosystem"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,3 +39,6 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.15",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
