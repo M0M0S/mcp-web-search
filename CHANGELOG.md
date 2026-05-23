@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-05-23
+
+### Fixed
+- **ResourceWarning: unclosed SQLite connections** — `shared_db` fixture converted to generator with `conn.close()` on teardown, eliminating all `ResourceWarning: unclosed database` warnings in pytest
+- **Pre-commit coverage gap** — added `pytest-integration` hook to `.pre-commit-config.yaml` for integration test coverage in pre-commit (previously only ran `tests/unit/`)
+
+### CI/Pre-commit
+- Unit tests: 853 passed, 0 warnings
+- Integration tests: require running MCP server + Redis (CI-only)
+- mypy: 0 errors
+- ruff: 0 violations
+
+---
+
 ## [1.1.1] - 2026-05-23
 
 ### Stabilization — post-fix coherence improvements
