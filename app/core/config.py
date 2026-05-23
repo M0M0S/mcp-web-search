@@ -249,6 +249,60 @@ class Settings(BaseSettings):
         description="Maximum new concepts per hour for Knowledge Graph enrichment (default: 10)",
     )
 
+    # MCP Authorization
+    MCP_ENCRYPTION_KEY: Optional[str] = None  # Fernet encryption key (env only)
+    MCP_ENCRYPTION_KEY_BACKUP: Optional[str] = None  # Backup encryption key (optional)
+    ADMIN_KEY_IDS: list[str] = []  # Comma-separated key_ids with admin scope
+
+    @model_validator(mode="after")
+    def _parse_admin_key_ids(self) -> Self:
+        """Parse ADMIN_KEY_IDS from comma-separated string in .env into list."""
+        raw = os.getenv("ADMIN_KEY_IDS", "")
+        if raw:
+            self.ADMIN_KEY_IDS = [
+                k.strip() for k in raw.split(",") if k.strip()
+            ]
+        return self
+
+    # Rate Limit Defaults
+    DEFAULT_RATE_LIMIT_DAILY: int = Field(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Default daily rate limit for new users",
+    )
+    DEFAULT_RATE_LIMIT_WEEKLY: int = Field(
+        default=500,
+        ge=1,
+        le=10000,
+        description="Default weekly rate limit for new users",
+    )
+    DEFAULT_RATE_LIMIT_MONTHLY: int = Field(
+        default=2000,
+        ge=1,
+        le=100000,
+        description="Default monthly rate limit for new users",
+    )
+
+    # Token Limit Defaults
+    DEFAULT_TOKEN_LIMIT_DAILY: int | None = Field(
+        default=None,
+        description="Default daily token limit for new users (None = unlimited)",
+    )
+    DEFAULT_TOKEN_LIMIT_WEEKLY: int | None = Field(
+        default=None,
+        description="Default weekly token limit for new users (None = unlimited)",
+    )
+    DEFAULT_TOKEN_LIMIT_MONTHLY: int | None = Field(
+        default=None,
+        description="Default monthly token limit for new users (None = unlimited)",
+    )
+
+    @property
+    def auth_enabled(self) -> bool:
+        """Whether MCP authorization is enabled."""
+        return bool(self.MCP_ENCRYPTION_KEY and self.MCP_ENCRYPTION_KEY.strip())
+
     @property
     def available_providers(self) -> list[str]:
         """Return list of available search providers based on configured keys."""
