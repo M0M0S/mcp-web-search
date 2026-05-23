@@ -187,9 +187,7 @@ class TestTokenCostRecording:
 class TestRedisCountersMocked:
     """Token counters via mocked Redis — Redis path."""
 
-    def test_get_token_usage_from_redis(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    def test_get_token_usage_from_redis(self, mock_redis_pool: MagicMock) -> None:
         """get_token_usage returns values from mocked Redis."""
 
         def _get_side_effect(key: str) -> int | None:
@@ -209,9 +207,7 @@ class TestRedisCountersMocked:
         assert usage["output_tokens"] == 250
         assert usage["total_tokens"] == 750
 
-    def test_check_token_limits_from_redis(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    def test_check_token_limits_from_redis(self, mock_redis_pool: MagicMock) -> None:
         """check_token_limits reads from mocked Redis."""
 
         def _get_side_effect(key: str) -> int | None:
@@ -481,9 +477,7 @@ class TestTokenTierTTL:
 class TestKeyAbsenceBugFix:
     """Verify that key-absence does NOT set `_redis_available = False`."""
 
-    def test_new_user_does_not_disable_redis(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    def test_new_user_does_not_disable_redis(self, mock_redis_pool: MagicMock) -> None:
         """New user (no Redis keys) → counters from DB fallback, _redis_available stays True."""
 
         def _get_side_effect(key: str) -> int | None:
@@ -526,7 +520,7 @@ class TestKeyAbsenceBugFix:
         from app.core.token_cost_tracker import get_token_usage
 
         # First call — new user, keys absent
-        usage1 = get_token_usage("new_user", "daily")
+        get_token_usage("new_user", "daily")
         assert token_cost_tracker._redis_available is True
 
         # Second call — existing user, keys present
@@ -567,9 +561,7 @@ class TestRedisRecovery:
         assert usage["input_tokens"] == 0
         assert usage["output_tokens"] == 0
 
-    async def test_async_recovery_completes(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    async def test_async_recovery_completes(self, mock_redis_pool: MagicMock) -> None:
         """Direct async recovery ping → ``_redis_available`` restored."""
 
         from app.core import token_cost_tracker
@@ -583,9 +575,7 @@ class TestRedisRecovery:
         assert token_cost_tracker._redis_available is True
         assert token_cost_tracker._redis_last_check > 0
 
-    async def test_async_recovery_failure(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    async def test_async_recovery_failure(self, mock_redis_pool: MagicMock) -> None:
         """Async recovery ping fails → ``_redis_available`` stays False, ``_redis_last_check`` updated."""
 
         from app.core import token_cost_tracker
@@ -630,9 +620,7 @@ class TestRecordTokensRedisPath:
         expire_calls = mock_redis_pool.expire.call_args_list
         assert len(expire_calls) == 2
 
-    def test_record_tokens_redis_success_path(
-        self, mock_redis_pool: MagicMock
-    ) -> None:
+    def test_record_tokens_redis_success_path(self, mock_redis_pool: MagicMock) -> None:
         """record_tokens returns without exception on Redis success — counters updated."""
 
         def _get_side_effect(key: str) -> int | None:
@@ -646,7 +634,9 @@ class TestRecordTokensRedisPath:
 
         from app.core.token_cost_tracker import record_tokens
 
-        result = record_tokens("success_user", "daily", input_tokens=200, output_tokens=100)  # type: ignore[assignment,func-returns-value]
+        result = record_tokens(
+            "success_user", "daily", input_tokens=200, output_tokens=100
+        )  # type: ignore[assignment,func-returns-value]
 
         assert result is None  # function returns None on success
 
