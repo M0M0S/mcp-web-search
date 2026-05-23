@@ -34,57 +34,57 @@ class TestSSRFValidation:
         protection = SSRFProtection()
 
         with pytest.raises(ValueError, match="Private IP address"):
-            protection._validate_url("http://127.0.0.1")
+            protection._validate_url("https://127.0.0.1")
 
     def test_rejects_localhost_ipv6(self):
         """Test that IPv6 localhost is rejected."""
         protection = SSRFProtection()
 
         with pytest.raises(ValueError, match="Private IP address"):
-            protection._validate_url("http://::1")
+            protection._validate_url("https://[::1]")
 
     def test_rejects_private_ip_range_10(self):
         """Test that 10.x.x.x private IPs are rejected."""
         protection = SSRFProtection()
 
         with pytest.raises(ValueError, match="Private IP address"):
-            protection._validate_url("http://10.0.0.1")
+            protection._validate_url("https://10.0.0.1")
 
     def test_rejects_private_ip_range_172(self):
         """Test that 172.16.x.x private IPs are rejected."""
         protection = SSRFProtection()
 
         with pytest.raises(ValueError, match="Private IP address"):
-            protection._validate_url("http://172.16.0.1")
+            protection._validate_url("https://172.16.0.1")
 
     def test_rejects_private_ip_range_192(self):
         """Test that 192.168.x.x private IPs are rejected."""
         protection = SSRFProtection()
 
         with pytest.raises(ValueError, match="Private IP address"):
-            protection._validate_url("http://192.168.1.1")
+            protection._validate_url("https://192.168.1.1")
+
+    def test_rejects_http_scheme(self):
+        """Test that http:// scheme is rejected."""
+        protection = SSRFProtection()
+
+        with pytest.raises(ValueError, match="HTTP scheme not allowed"):
+            protection._validate_url("http://example.com")
 
     def test_accepts_public_ip(self):
         """Test that public IPs are accepted."""
         protection = SSRFProtection()
 
         # Should not raise exception for public IP
-        protection._validate_url("http://8.8.8.8")
+        protection._validate_url("https://8.8.8.8")
 
     def test_accepts_domain_name(self):
         """Test that domain names are accepted."""
         protection = SSRFProtection()
 
         # Should not raise exception for valid domains
-        protection._validate_url("http://example.com")
+        protection._validate_url("https://example.com")
         protection._validate_url("https://www.google.com")
-
-    def test_accepts_http_scheme(self):
-        """Test that http:// scheme is accepted."""
-        protection = SSRFProtection()
-
-        # Should not raise exception for http
-        protection._validate_url("http://example.com")
 
     def test_accepts_https_scheme(self):
         """Test that https:// scheme is accepted."""

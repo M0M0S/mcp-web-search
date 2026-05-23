@@ -84,12 +84,12 @@ class TestContentServiceSSRFTDD:
         service = ContentService(settings, MockRedis())
 
         # Before implementation: would try to fetch localhost:1234
-        # After implementation: should reject private IPs
+        # After implementation: should reject private IPs (HTTPS required)
         with pytest.raises(ValueError, match="Private IP address"):
-            await service.extract_content("http://127.0.0.1")
+            await service.extract_content("https://127.0.0.1")
 
         with pytest.raises(ValueError, match="Private IP address"):
-            await service.extract_content("http://localhost")
+            await service.extract_content("https://localhost")
 
 
 class TestContentServiceFallbackTDD:

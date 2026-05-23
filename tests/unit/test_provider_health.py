@@ -1188,13 +1188,32 @@ class TestSearchFallbackChainIntegration:
         ):
             service = SearchService(settings=mock_settings, redis=mock_redis)
 
-            # Patch _search_provider to return results for duck, None for searxng
-            original_search_provider = service._search_provider
+            # Create proper SearchResult objects for duck provider
+            from app.models.search import SearchResult
+
+            duck_results = [
+                SearchResult(
+                    title="Test Result 1",
+                    url="https://example.com/result1",
+                    snippet="Relevant snippet about test query",
+                    seo_spam_score=0.0,
+                    freshness_score=0.8,
+                    authority_score=0.7,
+                ),
+                SearchResult(
+                    title="Test Result 2",
+                    url="https://example.com/result2",
+                    snippet="Another relevant snippet",
+                    seo_spam_score=0.0,
+                    freshness_score=0.6,
+                    authority_score=0.5,
+                ),
+            ]
 
             async def patched_search_provider(provider, request):
                 if provider == "searxng":
                     return None  # simulate degraded provider failure
-                return await original_search_provider(provider, request)
+                return duck_results  # duck returns valid results
 
             with (
                 patch.object(

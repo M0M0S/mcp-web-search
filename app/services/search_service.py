@@ -292,7 +292,7 @@ class SearchService:
             )
             return None
 
-        cse_id = getattr(self.settings, "GOOGLE_CSE_ID", None)
+        cse_id = self.settings.GOOGLE_CSE_ID
         if not cse_id:
             logger.warning(
                 f"Provider {Provider.google} unavailable (missing GOOGLE_CSE_ID)"
@@ -374,8 +374,11 @@ class SearchService:
         # Content diversity: estimate based on diversity of providers
         content_diversity = min(source_diversity + 0.1, 1.0)
 
+        weights = self.settings.DIVERSITY_WEIGHTS
         overall = (
-            source_diversity * 0.4 + temporal_diversity * 0.3 + content_diversity * 0.3
+            source_diversity * weights["source"]
+            + temporal_diversity * weights["temporal"]
+            + content_diversity * weights["content"]
         )
 
         return {
@@ -416,22 +419,6 @@ class SearchService:
             # Map LLM judgment (JudgeVerdict) to SearchResultJudge using from_judge_verdict
             judgment_result = SearchResultJudge.from_judge_verdict(judgment)
 
-            # Integrate verdict into decision logic: reject → fallback required
-            if judgment_result.verdict == "reject":
-                logger.info(
-                    f"Search results rejected by LLM judge. Query: {query}",
-                    extra={"reasons": judgment_result.reasons},
-                )
-                # Return judgment with score=0.0 to signal rejection
-                return SearchResultJudge(
-                    diversity_score=0.0,
-                    trustworthiness_score=0.0,
-                    relevance_to_query=0.0,
-                    score=0.0,  # Explicitly set to 0.0 for rejected results
-                    verdict="reject",
-                    reasons=["LLM judge rejected results - low quality or irrelevant"],
-                )
-
             return judgment_result
         except Exception as e:
             logger.warning(f"LLM judgment failed: {e}. Using fallback scores.")
@@ -449,14 +436,24 @@ class SearchService:
                 trustworthiness_score=0.75,
                 relevance_to_query=0.85,
                 score=0.0,  # Fallback: explicitly set to 0.0 instead of None
-                verdict="retry",
+                verdict="reject",
                 reasons=["LLM judgment failed - using fallback heuristic scores"],
             )
 
     def _is_blacklisted(self, result: SearchResult) -> bool:
         """Check if URL is in blacklist."""
         domain = urlparse(str(result.url)).netloc
-        return domain in self.settings.BLACKLIST_DOMAINS
+        if domain in self.settings.BLACKLIST_DOMAINS:
+            return True
+
+        # Wildcard matching via fnmatch
+        import fnmatch
+
+        for pattern in self.settings.BLACKLIST_DOMAIN_PATTERNS:
+            if fnmatch.fnmatch(domain, pattern):
+                return True
+
+        return False
 
     def _calculate_quality_score(self, result: SearchResult) -> QualityScore:
         """Calculate quality score for search result based on URL characteristics."""
@@ -503,6 +500,10 @@ class SearchService:
         url = str(result.url)
         domain = url.lower()
 
+        # URL shorteners — always flagged as spam
+        if any(d in domain for d in ["bit.ly", "t.co", "goo.gl", "tinyurl"]):
+            return True
+
         # High-risk domains
         if ".xyz" in domain or ".blog" in domain:
             return True
@@ -511,6 +512,10 @@ class SearchService:
         path = url.lower()
         if any(word in path for word in ["click", "free", "winner"]):
             return True
+
+        # Ad-heavy patterns — add penalty to quality score
+        if any(word in path for word in ["ad", "ads", "affiliate", "sponsor"]):
+            result.seo_spam_score = (result.seo_spam_score or 0.0) + 0.15
 
         return False
 

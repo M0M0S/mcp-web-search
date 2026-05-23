@@ -7,7 +7,7 @@ Environment variables for **MCP Web Search**. Copy `.env.example` to `.env` and 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_NAME` | `web-search` | MCP server name |
-| `MCP_VERSION` | `1.0.0` | MCP server version |
+| `MCP_VERSION` | `1.1.2` | MCP server version |
 | `MCP_HOST` | `0.0.0.0` | Bind address |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 

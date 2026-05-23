@@ -149,21 +149,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def init_db() -> sqlite3.Connection:
-    """Initialise the SQLite connection and auto-create schema on first access.
+    """Return a SQLite connection to the user database.
 
-    Returns:
-        A sqlite3.Connection configured with dict row factory.
+    Each call creates a new connection — callers must close after use.
+    Connection pooling is not used to avoid test isolation issues.
     """
     settings = _get_settings()
     db_path: str = settings.KG_DB_PATH
-
     conn = sqlite3.connect(db_path)
-    conn.row_factory = _dict_factory
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-
+    conn.row_factory = sqlite3.Row
     _ensure_schema(conn)
-    logger.info("user_store_db_init", db_path=db_path, schema_version=_SCHEMA_VERSION)
     return conn
 
 

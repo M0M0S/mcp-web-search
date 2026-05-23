@@ -50,7 +50,7 @@ fmt: ## Format code
 lint: ## Run linters
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy app/ --ignore-missing-imports --explicit-package-bases
+	uv run mypy app/ --explicit-package-bases
 
 # =============================================================================
 # Unit Tests (fast, isolated, no external dependencies)
@@ -76,8 +76,8 @@ integration-tests-cover: ## Run integration tests with coverage
 # Full Tests (unit + integration)
 # =============================================================================
 
-full-test: ## Run all tests (unit + integration)
-	uv run pytest -v
+full-test: ## Run all tests (unit + integration, with warnings as errors)
+	uv run pytest -v -W error::ResourceWarning
 
 full-test-cover: ## Run all tests with coverage
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing
@@ -86,9 +86,9 @@ full-test-cover: ## Run all tests with coverage
 # Pre-commit Hook
 # =============================================================================
 
-pre-commit-hook: ## Run pre-commit checks (format + security + unit-tests)
+pre-commit-hook: ## Run pre-commit checks (format + security + all-tests)
 	@echo "=== Running format checks ==="
-	@if uv run ruff check . || uv run ruff format --check .; then \
+	@if uv run ruff check . && uv run ruff format --check .; then \
 		echo "✅ Format checks passed"; \
 	else \
 		echo "❌ Format checks failed"; exit 1; \
@@ -101,11 +101,18 @@ pre-commit-hook: ## Run pre-commit checks (format + security + unit-tests)
 		echo "❌ Security checks failed"; exit 1; \
 	fi
 	@echo ""
-	@echo "=== Running unit tests ==="
-	@if uv run pytest -v tests/unit/ tests/tdd/; then \
-		echo "✅ Unit tests passed"; \
+	@echo "=== Running all tests (excluding integration) ==="
+	@if uv run pytest tests/ --ignore=tests/integration/ -v --tb=short; then \
+		echo "✅ Tests passed"; \
 	else \
-		echo "❌ Unit tests failed"; exit 1; \
+		echo "❌ Tests failed"; exit 1; \
+	fi
+	@echo ""
+	@echo "=== Running tests with ResourceWarning as errors ==="
+	@if uv run pytest tests/ --ignore=tests/integration/ -v --tb=short -W error::ResourceWarning; then \
+		echo "✅ ResourceWarning check passed"; \
+	else \
+		echo "❌ ResourceWarning check failed"; exit 1; \
 	fi
 	@echo ""
 	@echo "=== Pre-commit checks completed successfully ==="
@@ -114,14 +121,14 @@ pre-commit-hook: ## Run pre-commit checks (format + security + unit-tests)
 # Test and Deploy commands
 # =============================================================================
 
-test: ## Run all tests (alias for full-test)
-	uv run pytest -v
+test: ## Run all tests (unit + integration, with warnings as errors)
+	uv run pytest -v -W error::ResourceWarning
 
 test-coverage: ## Run tests with coverage (alias for full-test-cover)
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing
 
 type-check: ## Type checking via mypy
-	uv run mypy app/ --ignore-missing-imports --explicit-package-bases
+	uv run mypy app/ --explicit-package-bases
 
 security-check: ## Security check (bandit + pip-audit)
 	uv run bandit -r app/ -ll

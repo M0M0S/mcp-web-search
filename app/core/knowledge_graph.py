@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -317,7 +316,7 @@ class KnowledgeGraph:
             ValueError: If enrichment rate limit exceeded.
         """
         # Check rate limit (max N new concepts per hour)
-        now = time.time()
+        now = datetime.now(timezone.utc).timestamp()
         one_hour_ago = now - 3600
         self._enrichment_timestamps = [
             t for t in self._enrichment_timestamps if t > one_hour_ago

@@ -51,15 +51,3 @@ async def init_redis(settings) -> RedisClient:
     client = get_redis(settings.REDIS_URL)
     await client.connect()
     return client
-
-
-class PlaceholderAuthClient:
-    """Placeholder for auth provider - should be fastmcp.server.auth.RemoteAuthProvider."""
-
-    pass
-
-
-def default_auth_provider():
-    """Return authentication provider."""
-    # Will be set up in main.py with FastMCP's built-in auth
-    return None

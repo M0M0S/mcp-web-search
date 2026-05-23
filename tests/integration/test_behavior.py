@@ -1,8 +1,24 @@
 """Integration tests for MCP service - full behavior specification."""
 
+import httpx
 import pytest
 
 
+def _mcp_server_available() -> bool:
+    """Check if MCP server is running on http://127.0.0.1:8000/mcp."""
+    try:
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get("http://127.0.0.1:8000/mcp")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestMCPToolsExist:
     """Tests that verify MCP tools are registered and accessible."""
 
@@ -15,6 +31,11 @@ class TestMCPToolsExist:
         assert len(await mcp.list_tools()) > 0
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestSearchToolBehavior:
     """Tests for search tool behavior."""
 
@@ -28,6 +49,11 @@ class TestSearchToolBehavior:
         assert len(tools) >= 3
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestGetContentToolBehavior:
     """Tests for get_content tool behavior."""
 
@@ -40,6 +66,11 @@ class TestGetContentToolBehavior:
         assert len(await mcp.list_tools()) >= 3
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestWebfetchToolBehavior:
     """Tests for webfetch agent behavior."""
 
@@ -52,6 +83,11 @@ class TestWebfetchToolBehavior:
         assert len(await mcp.list_tools()) >= 3
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestMCPResponseFormat:
     """Tests for response format validation."""
 

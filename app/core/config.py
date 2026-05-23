@@ -28,12 +28,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_ignore_empty=True,
-        extra="allow",  # Allow extra fields from .env
+        extra="ignore",  # Silently ignore unknown env vars — prevent accidental loading
     )
 
     # MCP
     MCP_NAME: str = "web-search"
-    MCP_VERSION: str = "1.0.0"
+    MCP_VERSION: str = "1.1.2"
     MCP_HOST: str = "0.0.0.0"  # nosec B104
     LOG_LEVEL: str = "INFO"
 
@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     # Smart filter thresholds
     QUALITY_SCORE_THRESHOLD: float = 0.6
     BLACKLIST_DOMAINS: list[str] = ["example.com"]
+    BLACKLIST_DOMAIN_PATTERNS: list[str] = Field(
+        default_factory=list,
+        description="Wildcard/regex patterns for blacklist domains (e.g. '*.spam.com')",
+    )
+
+    # Diversity score weights
+    DIVERSITY_WEIGHTS: dict[str, float] = Field(
+        default_factory=lambda: {
+            "source": 0.4,
+            "temporal": 0.3,
+            "content": 0.3,
+        },
+        description="Weights for diversity score calculation (sum must = 1.0)",
+    )
 
     # get_content
     TOKEN_LIMIT: int = 8000
@@ -151,6 +165,17 @@ class Settings(BaseSettings):
                 )
         return self
 
+
+    @model_validator(mode="after")
+    def _validate_diversity_weights(self) -> Self:
+        """Validate DIVERSITY_WEIGHTS sum == 1.0."""
+        total = sum(self.DIVERSITY_WEIGHTS.values())
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(
+                f"DIVERSITY_WEIGHTS sum={total:.4f} != 1.0; ",
+                "weights must sum to exactly 1.0"
+            )
+        return self
     CACHE_INVALIDATION_INTERVAL: int = Field(
         default=3600,
         ge=60,

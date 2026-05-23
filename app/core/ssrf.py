@@ -1,5 +1,6 @@
 """SSRF protection utilities."""
 
+import asyncio
 import ipaddress
 
 import httpx
@@ -14,9 +15,6 @@ class SSRFConnectionError(Exception):
 class SSRFProtection:
     """SSRF-safe URL validation and fetching."""
 
-    def __init__(self):
-        self.client: httpx.Client | None = None
-
     async def fetch_async(self, url: str, **kwargs) -> bytes:
         """Async SSRF-safe fetch using httpx."""
         return await self._safe_fetch(url, is_async=True, **kwargs)
@@ -25,13 +23,15 @@ class SSRFProtection:
         """Sync SSRF-safe fetch using httpx."""
         self._validate_url(url)
 
-        self.client = httpx.Client()
+        client = httpx.Client()
         try:
-            response = self.client.get(url, **kwargs)
+            response = client.get(url, **kwargs)
         except httpx.ConnectTimeout as e:
             raise SSRFConnectionError(f"Connection timeout to {url}: {e}")
         except httpx.RequestError as e:
             raise SSRFConnectionError(f"Request failed for {url}: {e}")
+        finally:
+            client.close()
 
         return response.content
 
@@ -58,33 +58,42 @@ class SSRFProtection:
 
                 return response.content
         else:
-            self.client = httpx.Client()
-            try:
-                response = self.client.get(url, **kwargs)
-                # Check for HTTP errors (4xx/5xx)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                raise SSRFConnectionError(
-                    f"HTTP error {e.response.status_code} for {url}"
-                )
-            except httpx.ConnectTimeout as e:
-                raise SSRFConnectionError(f"Connection timeout to {url}: {e}")
-            except httpx.RequestError as e:
-                raise SSRFConnectionError(f"Request failed for {url}: {e}")
+            def _sync_fetch() -> bytes:
+                local_client = httpx.Client()
+                try:
+                    response = local_client.get(url, **kwargs)
+                    # Check for HTTP errors (4xx/5xx)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    raise SSRFConnectionError(
+                        f"HTTP error {e.response.status_code} for {url}"
+                    )
+                except httpx.ConnectTimeout as e:
+                    raise SSRFConnectionError(f"Connection timeout to {url}: {e}")
+                except httpx.RequestError as e:
+                    raise SSRFConnectionError(f"Request failed for {url}: {e}")
+                finally:
+                    local_client.close()
 
-            return response.content
+                return response.content
+
+            return await asyncio.to_thread(_sync_fetch)
 
     def _validate_url(self, url: str) -> None:
         """Validate URL to prevent SSRF attacks."""
-        # Check for dangerous schemes
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+
+        # Require HTTPS — HTTP is not allowed
+        if parsed.scheme == "http":
+            raise ValueError("HTTP scheme not allowed — require HTTPS")
+
+        # Check for dangerous schemes (non-HTTP)
         dangerous_schemes = ["file", "ftp", "tel", "gopher", "ldap"]
         if any(url.lower().startswith(scheme + ":") for scheme in dangerous_schemes):
             raise ValueError(f"Dangerous URL scheme: {url}")
 
-        # Validate IP addresses (prevent private IP access)
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
         hostname = parsed.hostname
 
         # Check for localhost

@@ -1,6 +1,7 @@
 """Logging configuration — guaranteed to work in Docker + FastMCP (structlog 25.1+)."""
 
 import logging
+import sys
 
 import structlog
 
@@ -15,12 +16,19 @@ def setup_logging(settings: Settings) -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    is_tty = sys.stdout.isatty()
+    renderer = (
+        structlog.dev.ConsoleRenderer(colors=True)
+        if is_tty
+        else structlog.processors.JSONRenderer()
+    )
+
     structlog.configure(
         processors=[
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer(colors=True),
+            renderer,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,

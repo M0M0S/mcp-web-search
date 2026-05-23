@@ -10,6 +10,7 @@ Raw API keys are delivered one-time only — never stored in DB or logs.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 from typing import Any
 
@@ -211,10 +212,9 @@ async def list_users(
 async def revoke_user(user_id: str) -> dict[str, Any]:
     """Revoke a user and clear Redis cache for rate/token counters.
 
-    Uses pattern-based deletion (rl:{user_id}:*, tc:{user_id}:*) to
-    ensure all keys across all tiers are cleared in a single operation.
-    This is a deliberate design choice — individual tier deletion could
-    miss keys if tiers are added later or if the tier list drifts.
+    Uses exact key enumeration to avoid pattern collision — keys are
+    discovered via ``keys()`` and deleted individually, preventing
+    accidental deletion of unrelated keys.
 
     Args:
         user_id: The user UUID hex.
@@ -228,17 +228,21 @@ async def revoke_user(user_id: str) -> dict[str, Any]:
     # Revoke in DB
     revoked_record: dict[str, Any] = _store_revoke_user(user_id)
 
-    # Delete Redis rate-limit counters for this user (pattern-based — all tiers)
+    # Delete Redis rate-limit counters for this user (exact key enumeration)
     try:
         rl_pool = _rl_get_pool(_get_settings())
-        rl_pool.delete(f"rl:{user_id}:*")  # type: ignore[union-attr]
+        rl_keys = await asyncio.to_thread(rl_pool.keys, f"rl:{user_id}:*")
+        if rl_keys:
+            await asyncio.to_thread(rl_pool.delete, *rl_keys)
     except Exception:
         logger.warning("redis_rate_counters_clear_failed", user_id=user_id)
 
-    # Delete Redis token-cost counters for this user (pattern-based — all tiers, both suffixes)
+    # Delete Redis token-cost counters for this user (exact key enumeration)
     try:
         tc_pool = _tc_get_pool(_get_settings())
-        tc_pool.delete(f"tc:{user_id}:*")  # type: ignore[union-attr]
+        tc_keys = await asyncio.to_thread(tc_pool.keys, f"tc:{user_id}:*")
+        if tc_keys:
+            await asyncio.to_thread(tc_pool.delete, *tc_keys)
     except Exception:
         logger.warning("redis_token_counters_clear_failed", user_id=user_id)
 
@@ -262,7 +266,7 @@ async def rotate_key(user_id: str) -> dict[str, Any]:
 
     Redis keys are indexed by user_id (not key_id) — user_id is unchanged
     during rotation, only key_id/key_version changes. Therefore deletion
-    uses user_id for Redis key clearing.
+    uses exact key enumeration via ``keys()`` to avoid pattern collision.
 
     Args:
         user_id: The user UUID hex.
@@ -283,18 +287,22 @@ async def rotate_key(user_id: str) -> dict[str, Any]:
     raw_key: str = generate_api_key()
     new_encrypted_key: str = encrypt_key(raw_key)
 
-    # Delete Redis rate-limit counters for this user (pattern-based — all tiers)
+    # Delete Redis rate-limit counters for this user (exact key enumeration)
     # Redis keys indexed by user_id, not key_id — user_id unchanged during rotation
     try:
         rl_pool = _rl_get_pool(_get_settings())
-        rl_pool.delete(f"rl:{user_id}:*")  # type: ignore[union-attr]
+        rl_keys = await asyncio.to_thread(rl_pool.keys, f"rl:{user_id}:*")
+        if rl_keys:
+            await asyncio.to_thread(rl_pool.delete, *rl_keys)
     except Exception:
         logger.warning("redis_rate_counters_clear_failed", user_id=user_id)
 
-    # Delete Redis token-cost counters for this user (pattern-based — all tiers, both suffixes)
+    # Delete Redis token-cost counters for this user (exact key enumeration)
     try:
         tc_pool = _tc_get_pool(_get_settings())
-        tc_pool.delete(f"tc:{user_id}:*")  # type: ignore[union-attr]
+        tc_keys = await asyncio.to_thread(tc_pool.keys, f"tc:{user_id}:*")
+        if tc_keys:
+            await asyncio.to_thread(tc_pool.delete, *tc_keys)
     except Exception:
         logger.warning("redis_token_counters_clear_failed", user_id=user_id)
 

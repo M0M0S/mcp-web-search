@@ -1,8 +1,24 @@
 """Integration tests for MCP tools via FastMCP Client."""
 
+import httpx
 import pytest
 
 
+def _mcp_server_available() -> bool:
+    """Check if MCP server is running on http://127.0.0.1:8000/mcp."""
+    try:
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get("http://127.0.0.1:8000/mcp")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestMCPToolCall:
     """Tests for tool calls through FastMCP client."""
 
@@ -25,6 +41,11 @@ class TestMCPToolCall:
         assert len(await mcp.list_tools()) >= 3
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _mcp_server_available(),
+    reason="MCP server not running on http://127.0.0.1:8000/mcp",
+)
 class TestMCPResponseFormat:
     """Tests for response format validation."""
 

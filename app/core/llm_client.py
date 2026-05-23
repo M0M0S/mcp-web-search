@@ -490,8 +490,7 @@ class LLMClient:
                         attempt=attempt + 1,
                         delay=wait_time,
                     )
-                    # Record rate limit as failure for health tracking
-                    self._health_tracker.record_failure(candidate_model)
+                    # RateLimitError is transient — do NOT record as health failure
                     await asyncio.sleep(wait_time)
                     continue
 

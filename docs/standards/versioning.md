@@ -19,7 +19,7 @@ MAJOR.MINOR.PATCH
 ### Current Version
 
 - **Project version** (pyproject.toml): `0.6.0`
-- **MCP server version** (runtime): `1.0.0` (`MCP_VERSION` env var)
+- **MCP server version** (runtime): `1.1.2` (`MCP_VERSION` env var)
 
 The MCP server version is independent from the project version — it reflects the MCP protocol interface stability.
 

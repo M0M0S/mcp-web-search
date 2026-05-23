@@ -42,7 +42,8 @@ def _ensure_schema(shared_db_path: str) -> Generator[None, None, None]:
     """Ensure all tables exist before each test."""
     from app.core.user_store import init_db
 
-    init_db()
+    conn = init_db()
+    conn.close()
     yield
 
 
@@ -62,12 +63,16 @@ def _mock_redis_available() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def shared_db(shared_db_path: str) -> sqlite3.Connection:
-    """Return a single SQLite connection with schema created."""
+def shared_db(shared_db_path: str) -> Generator[sqlite3.Connection, None, None]:
+    """Return a single SQLite connection with schema created.
+
+    Closes the connection on teardown to prevent ResourceWarning.
+    """
     from app.core.user_store import init_db
 
     conn: sqlite3.Connection = init_db()
-    return conn
+    yield conn
+    conn.close()
 
 
 @pytest.fixture

@@ -486,7 +486,7 @@ class TestMockFastMcpAuthComponents:
 
             server = FastMCP(
                 name="test-mcp",
-                version="1.0.0",
+                version="1.1.2",
                 auth=mock_auth_provider,
             )
 
@@ -509,7 +509,7 @@ class TestMockFastMcpAuthComponents:
 
             server = FastMCP(
                 name="test-mcp",
-                version="1.0.0",
+                version="1.1.2",
                 auth=None,
             )
 

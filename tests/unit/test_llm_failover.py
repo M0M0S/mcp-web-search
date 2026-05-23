@@ -957,8 +957,8 @@ class TestCallWithFailoverIntegration:
         assert model2_mock.chat.completions.create.call_count == 1
         assert client.health_tracker.get_health_score("claude-3") == 1.0
         assert (
-            client.health_tracker._failure_counts.get("gpt-4o", 0) == 3
-        )  # 3 rate limit failures
+            client.health_tracker._failure_counts.get("gpt-4o", 0) == 0
+        )  # RateLimitError does NOT record as health failure (H1 fix)
         assert client.health_tracker._success_counts.get("claude-3", 0) == 1
 
     def test_3_model_chain_primary_connection_error_model2_rate_limit_model3_success(

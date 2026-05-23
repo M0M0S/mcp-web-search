@@ -24,21 +24,24 @@ def _ensure_schema() -> Generator[None, None, None]:
     """Ensure token_cost_snapshots table exists before each test."""
     from app.core.user_store import init_db
 
-    init_db()  # creates all tables including token_cost_snapshots
+    conn = init_db()
+    conn.close()
     yield
 
 
 @pytest.fixture
-def shared_db(shared_db_path: str) -> sqlite3.Connection:
+def shared_db(shared_db_path: str) -> Generator[sqlite3.Connection, None, None]:
     """Return a single SQLite connection with schema created.
 
     Sets ``row_factory = None`` so queries return plain tuples (index-accessible).
+    Closes the connection on teardown to prevent ResourceWarning.
     """
     from app.core.user_store import init_db
 
     conn: sqlite3.Connection = init_db()
     conn.row_factory = None  # ensure tuple results for index access
-    return conn
+    yield conn
+    conn.close()
 
 
 @pytest.fixture

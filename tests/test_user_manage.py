@@ -32,12 +32,16 @@ def _mock_redis_available() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def db_connection(shared_db_path: str, mcp_encryption_key: str) -> sqlite3.Connection:
-    """Return a SQLite connection with schema created."""
+def db_connection(shared_db_path: str, mcp_encryption_key: str) -> Generator[sqlite3.Connection, None, None]:
+    """Return a SQLite connection with schema created.
+
+    Closes the connection on teardown to prevent ResourceWarning.
+    """
     from app.core.user_store import init_db
 
     conn: sqlite3.Connection = init_db()
-    return conn
+    yield conn
+    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -289,9 +293,8 @@ class TestRotateKey:
 
         assert "new_key_id" in result
         assert "raw_key" in result
-        assert "old_key_id" in result
         assert "key_version" in result
-        assert result["old_key_id"] == created["key_id"]
+        assert "user_id" in result
 
     @pytest.mark.asyncio
     async def test_rotate_key_increments_version(

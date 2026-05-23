@@ -33,7 +33,7 @@ class TestSettings:
             settings = Settings()
 
             assert settings.MCP_NAME == "web-search"
-            assert settings.MCP_VERSION == "1.0.0"
+            assert settings.MCP_VERSION == "1.1.2"
             assert settings.REDIS_URL == "redis://localhost:6379/0"
             assert settings.SEARCH_RESULT_CACHE_TTL == 3600
             assert settings.CONTENT_CACHE_TTL == 86400
@@ -69,6 +69,29 @@ class TestSettings:
         assert "duck" in settings.available_providers
 
 
+
+    def test_diversity_weights_default_sum(self):
+        """Test DIVERSITY_WEIGHTS default sums to 1.0."""
+        from app.core.config import Settings
+
+        settings = Settings()
+        total = sum(settings.DIVERSITY_WEIGHTS.values())
+        assert abs(total - 1.0) < 0.001
+
+    def test_diversity_weights_custom_valid(self):
+        """Test DIVERSITY_WEIGHTS custom valid weights accepted."""
+        from app.core.config import Settings
+
+        settings = Settings(DIVERSITY_WEIGHTS={"source": 0.5, "temporal": 0.3, "content": 0.2})
+        total = sum(settings.DIVERSITY_WEIGHTS.values())
+        assert abs(total - 1.0) < 0.001
+
+    def test_diversity_weights_invalid_raises(self):
+        """Test DIVERSITY_WEIGHTS invalid sum raises ValueError."""
+        from app.core.config import Settings
+
+        with pytest.raises(ValueError, match="DIVERSITY_WEIGHTS sum"):
+            Settings(DIVERSITY_WEIGHTS={"source": 0.9, "temporal": 0.9, "content": 0.9})
 class TestLLMEpic1Config:
     """Tests for LLM Epic 1 configuration fields defaults and constraints."""
 

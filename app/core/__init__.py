@@ -1,7 +1,7 @@
 """Core module - configuration, logging, dependencies, encryption."""
 
 from .config import Settings
-from .dependencies import default_auth_provider, get_redis
+from .dependencies import get_redis
 from .encryption import (
     clear_backup_key,
     decrypt_key,
@@ -37,7 +37,6 @@ __all__ = [
     "Settings",
     "setup_logging",
     "get_redis",
-    "default_auth_provider",
     "generate_api_key",
     "encrypt_key",
     "decrypt_key",

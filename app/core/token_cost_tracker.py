@@ -4,6 +4,11 @@ Manages per-user token usage counters across tiers (daily/weekly/monthly).
 Primary storage: Redis atomic counters. Fallback: SQLite token_cost_snapshots
 table. Enforcement is informational only — produces warnings in tool responses,
 never hard-blocks execution.
+
+mypy configuration (module-level): third-party libraries (redis, instructor, tavily)
+lack type stubs. ``follow_imports = "skip"`` in pyproject.toml suppresses all
+import-untyped / no-untyped-call errors for these dependencies — per-line
+``# type: ignore`` comments are unnecessary and have been removed.
 """
 
 from __future__ import annotations
@@ -123,18 +128,18 @@ def _redis_get_int(pool: redis.Redis, key: str) -> int | None:
     Returns:
         Integer value or None if key absent.
     """
-    raw = pool.get(key)  # type: ignore[assignment]
+    raw = pool.get(key)
     if raw is None:
         return None
-    return cast(int, int(raw))  # type: ignore[arg-type]
+    return cast(int, int(raw))
 
 
 async def _redis_get_int_async(pool: redis_async.Redis, key: str) -> int | None:
     """Async variant of `_redis_get_int` for use with async Redis client."""
-    raw = await pool.get(key)  # type: ignore[assignment]
+    raw = await pool.get(key)
     if raw is None:
         return None
-    return cast(int, int(raw))  # type: ignore[arg-type]
+    return cast(int, int(raw))
 
 
 def _get_counter_with_fallback(
@@ -255,9 +260,9 @@ def _increment_counter_in_redis(
         return None
     pool = _get_pool(_get_settings())
     key = f"{_redis_key(user_id, tier)}:{suffix}"
-    pool.incrby(key, amount)  # type: ignore[no-untyped-call]
+    pool.incrby(key, amount)
     ttl = _rl_get_tier_ttl(tier)
-    pool.expire(key, ttl)  # type: ignore[no-untyped-call]
+    pool.expire(key, ttl)
     return _redis_get_int(pool, key)
 
 
@@ -337,7 +342,7 @@ async def _perform_redis_recovery() -> None:
     try:
         settings = _get_settings()
         pool = _get_pool(settings)
-        await asyncio.to_thread(pool.ping)  # type: ignore[no-untyped-call]
+        await asyncio.to_thread(pool.ping)
         _redis_available = True
         _redis_last_check = time.time()
     except (redis.ConnectionError, redis.TimeoutError, OSError):
@@ -474,10 +479,9 @@ def check_token_limits(
 
     if limit_input is not None and limit_input > 0 and total >= limit_input:
         exceeded = True
-        remaining = max(0, limit_input - total)
         warning = (
-            f"Token usage ({total} total) approaching/exceeding {tier} limit "
-            f"({limit_input}). Remaining: {remaining} tokens."
+            f"Token usage approaching/exceeding {tier} limit. "
+            f"Enforcement is informational only."
         )
 
     return {

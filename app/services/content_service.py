@@ -1,8 +1,7 @@
 """Content extraction service with SSRF protection."""
 
-from typing import TYPE_CHECKING
-
 import redis
+from typing import TYPE_CHECKING, Final
 
 from app.core.config import Settings
 from app.core.logging import get_logger
@@ -12,6 +11,9 @@ from app.models.content import CleanContent, ContentMetadata
 
 if TYPE_CHECKING:
     from app.core.dependencies import RedisClient
+
+# Approximate token-to-word ratio for common LLM models
+_TOKEN_TO_WORD_RATIO: Final[float] = 1.3
 
 
 logger = get_logger(__name__)
@@ -124,12 +126,15 @@ class ContentService:
         return ""
 
     def _truncate(self, text: str, token_limit: int) -> str:
-        """Truncate text to token limit."""
+        """Truncate text to token limit using approximate token-to-word ratio."""
         tokens = text.split()
-        if len(tokens) <= token_limit:
+        # word_count ≈ token_count / _TOKEN_TO_WORD_RATIO
+        approximate_word_limit = int(token_limit / _TOKEN_TO_WORD_RATIO)
+        if len(tokens) <= approximate_word_limit:
             return text
 
-        truncated = " ".join(tokens[:token_limit])
+        truncated = " ".join(tokens[:approximate_word_limit])
+        # approx_tokens = len(truncated.split()) * _TOKEN_TO_WORD_RATIO
         return truncated + "..."
 
     def compute_adaptive_ttl(self, freshness_score: float) -> int:

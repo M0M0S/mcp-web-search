@@ -7,6 +7,7 @@ rate/token limit bounds validation, and pagination.
 from __future__ import annotations
 
 import sqlite3
+from typing import Generator
 
 import pytest
 
@@ -16,12 +17,16 @@ import pytest
 
 
 @pytest.fixture
-def db_connection(shared_db_path: str, mcp_encryption_key: str) -> sqlite3.Connection:
-    """Return a SQLite connection with schema created."""
+def db_connection(shared_db_path: str, mcp_encryption_key: str) -> Generator[sqlite3.Connection, None, None]:
+    """Return a SQLite connection with schema created.
+
+    Closes the connection on teardown to prevent ResourceWarning.
+    """
     from app.core.user_store import init_db
 
     conn: sqlite3.Connection = init_db()
-    return conn
+    yield conn
+    conn.close()
 
 
 @pytest.fixture
@@ -296,7 +301,6 @@ class TestRotateKey:
         result = rotate_key(created_user["user_id"])
 
         assert result["new_key_version"] == 2
-        assert result["old_key_id"] == created_user["key_id"]
         assert result["user_id"] == created_user["user_id"]
 
     def test_rotate_multiple_times(

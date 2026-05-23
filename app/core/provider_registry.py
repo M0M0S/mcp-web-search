@@ -431,9 +431,9 @@ class ProviderHealthProbe:
                 score=self._tracker.get_health_score(provider),
             )
         else:
-            # Probe errors do NOT count as failures — only probe-specific handling
+            self._tracker.record_failure(provider)
             logger.debug(
-                "provider_health_probe_failed_not_counted",
+                "provider_health_probe_failed",
                 provider=provider,
             )
 
