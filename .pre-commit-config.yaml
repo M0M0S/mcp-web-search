@@ -43,3 +43,10 @@ repos:
         entry: uv lock --check
         language: system
         pass_filenames: false
+
+      - id: pytest-integration
+        name: run integration tests
+        entry: uv run pytest tests/integration/ -v --tb=short
+        language: system
+        types: [python]
+        pass_filenames: false
