@@ -53,7 +53,7 @@ def user_with_token_limits(shared_db: sqlite3.Connection) -> dict:
 
 
 @pytest.fixture
-def mock_redis_pool() -> Generator[None, None, None]:
+def mock_redis_pool() -> Generator[MagicMock, None, None]:
     """Mock Redis pool — patches ``redis.from_url`` for token_cost_tracker.
 
     Default state: Redis available, all operations succeed.
@@ -188,7 +188,7 @@ class TestRedisCountersMocked:
     """Token counters via mocked Redis — Redis path."""
 
     def test_get_token_usage_from_redis(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """get_token_usage returns values from mocked Redis."""
 
@@ -210,7 +210,7 @@ class TestRedisCountersMocked:
         assert usage["total_tokens"] == 750
 
     def test_check_token_limits_from_redis(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """check_token_limits reads from mocked Redis."""
 
@@ -482,7 +482,7 @@ class TestKeyAbsenceBugFix:
     """Verify that key-absence does NOT set `_redis_available = False`."""
 
     def test_new_user_does_not_disable_redis(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """New user (no Redis keys) → counters from DB fallback, _redis_available stays True."""
 
@@ -507,7 +507,7 @@ class TestKeyAbsenceBugFix:
         assert usage["total_tokens"] == 0
 
     def test_key_absence_does_not_affect_subsequent_redis_reads(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """After key-absence fallback, subsequent reads still use Redis."""
 
@@ -545,7 +545,7 @@ class TestRedisRecovery:
     """TTL-based Redis health-check recovery — non-blocking async ping."""
 
     def test_recovery_ping_scheduled_non_blocking(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """Recovery ping scheduled as non-blocking async task.
 
@@ -568,7 +568,7 @@ class TestRedisRecovery:
         assert usage["output_tokens"] == 0
 
     async def test_async_recovery_completes(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """Direct async recovery ping → ``_redis_available`` restored."""
 
@@ -584,7 +584,7 @@ class TestRedisRecovery:
         assert token_cost_tracker._redis_last_check > 0
 
     async def test_async_recovery_failure(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """Async recovery ping fails → ``_redis_available`` stays False, ``_redis_last_check`` updated."""
 
@@ -603,128 +603,6 @@ class TestRedisRecovery:
 
 
 # ---------------------------------------------------------------------------
-# 9. flush_counters_to_db — async scan + DB upsert
-# ---------------------------------------------------------------------------
-
-
-class TestFlushCountersToDB:
-    """flush_counters_to_db — async scan + DB upsert."""
-
-    async def test_flush_syncs_redis_counters_to_db(
-        self, shared_db: sqlite3.Connection
-    ) -> None:
-        """flush_counters_to_db scans Redis keys and upserts to DB."""
-        from app.core import token_cost_tracker
-        from app.core.token_cost_tracker import flush_counters_to_db
-        from unittest.mock import AsyncMock, MagicMock
-
-        token_cost_tracker._redis_available = True
-        token_cost_tracker._redis_async_pool = None
-
-        mock_pool: MagicMock = MagicMock()
-
-        async def _scan_side_effect(
-            cursor: int, match: str, count: int
-        ) -> tuple[int, list[str]]:
-            if cursor == 0:
-                return (
-                    100,
-                    [
-                        "tc:user_flush:daily:input",
-                        "tc:user_flush:daily:output",
-                        "tc:user_flush2:weekly:input",
-                    ],
-                )
-            return (0, [])
-
-        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
-        mock_pool.delete.return_value = 1
-
-        # Mock get to return integer values for scanned keys
-        async def _get_side_effect(key: str) -> int | None:
-            if "user_flush" in key and "input" in key:
-                return 1000
-            if "user_flush" in key and "output" in key:
-                return 500
-            if "user_flush2" in key:
-                return 200
-            return None
-
-        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
-
-        with patch.object(
-            token_cost_tracker,
-            "_get_async_pool",
-            return_value=mock_pool,  # type: ignore[arg-type]
-        ) as mock_get_pool:
-            result = await flush_counters_to_db()
-
-        # Verify _get_async_pool was called and returned mock
-        mock_get_pool.assert_called_once()
-
-        assert result["synced"] == 3
-        assert result["failed"] == 0
-
-    async def test_flush_noop_when_redis_unavailable(
-        self, force_db_fallback: None
-    ) -> None:
-        """flush_counters_to_db returns ``{synced: 0, failed: 0}`` when Redis unavailable."""
-        from app.core.token_cost_tracker import flush_counters_to_db
-
-        result = await flush_counters_to_db()
-
-        assert result == {"synced": 0, "failed": 0}
-
-    async def test_flush_skips_malformed_keys(
-        self, shared_db: sqlite3.Connection
-    ) -> None:
-        """flush_counters_to_db skips keys that don't match tc:user:tier:suffix format."""
-        from app.core import token_cost_tracker
-        from app.core.token_cost_tracker import flush_counters_to_db
-        from unittest.mock import AsyncMock, MagicMock
-
-        token_cost_tracker._redis_available = True
-        token_cost_tracker._redis_async_pool = None
-
-        mock_pool: MagicMock = MagicMock()
-
-        async def _scan_side_effect(
-            cursor: int, match: str, count: int
-        ) -> tuple[int, list[str]]:
-            if cursor == 0:
-                return (
-                    100,
-                    [
-                        "tc:bad_key",
-                        "tc:user:daily:input",
-                    ],
-                )
-            return (0, [])
-
-        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
-        mock_pool.delete.return_value = 1
-
-        async def _get_side_effect(key: str) -> int | None:
-            if "user" in key and "input" in key:
-                return 42
-            return None
-
-        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
-
-        with patch.object(
-            token_cost_tracker,
-            "_get_async_pool",
-            return_value=mock_pool,  # type: ignore[arg-type]
-        ) as mock_get_pool:
-            result = await flush_counters_to_db()
-
-        mock_get_pool.assert_called_once()
-
-        assert result["synced"] == 1
-        assert result["failed"] == 0
-
-
-# ---------------------------------------------------------------------------
 # 10. record_tokens — Redis increment path
 # ---------------------------------------------------------------------------
 
@@ -733,10 +611,14 @@ class TestRecordTokensRedisPath:
     """record_tokens — Redis incrby + expire path."""
 
     def test_record_tokens_increases_redis_counters(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """record_tokens calls incrby + expire on Redis for both counters."""
+        from app.core import token_cost_tracker
         from app.core.token_cost_tracker import record_tokens
+
+        # Ensure Redis is available (may be False from previous tests)
+        token_cost_tracker._redis_available = True
 
         record_tokens("redis_rec_user", "daily", input_tokens=100, output_tokens=50)
 
@@ -749,7 +631,7 @@ class TestRecordTokensRedisPath:
         assert len(expire_calls) == 2
 
     def test_record_tokens_redis_success_path(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """record_tokens returns without exception on Redis success — counters updated."""
 
@@ -764,7 +646,7 @@ class TestRecordTokensRedisPath:
 
         from app.core.token_cost_tracker import record_tokens
 
-        result = record_tokens("success_user", "daily", input_tokens=200, output_tokens=100)
+        result = record_tokens("success_user", "daily", input_tokens=200, output_tokens=100)  # type: ignore[assignment,func-returns-value]
 
         assert result is None  # function returns None on success
 
@@ -784,9 +666,12 @@ class TestRecordTokensRedisPath:
         assert token_cost_tracker._redis_available is True
 
     def test_record_tokens_redis_failure_sets_unavailable(
-        self, mock_redis_pool: Generator[None, None, None]
+        self, mock_redis_pool: MagicMock
     ) -> None:
         """record_tokens Redis failure → ``_redis_available`` = False."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import record_tokens
+
         mock_redis_pool.incrby.side_effect = redis.ConnectionError("connection lost")  # type: ignore[assignment]
 
         record_tokens("fail_user", "daily", input_tokens=100, output_tokens=50)
@@ -805,7 +690,7 @@ class TestBackupKeyIndependence:
     def test_backup_key_does_not_affect_redis_available(
         self,
         mcp_encryption_key_backup: str,
-        mock_redis_pool: Generator[None, None, None],
+        mock_redis_pool: MagicMock,
     ) -> None:
         """Setting a backup encryption key does not change ``_redis_available``."""
         from app.core import token_cost_tracker
@@ -839,7 +724,7 @@ class TestBackupKeyIndependence:
         self,
         mcp_encryption_key: str,
         mcp_encryption_key_backup: str,
-        force_db_fallback_token_cost_tracker: None,
+        force_db_fallback: None,
         shared_db: sqlite3.Connection,
     ) -> None:
         """Token counters work correctly via DB fallback regardless of encryption key presence."""
@@ -870,7 +755,7 @@ class TestBackupKeyIndependence:
     async def test_flush_counters_noop_with_backup_key_present(
         self,
         mcp_encryption_key_backup: str,
-        force_db_fallback_token_cost_tracker: None,
+        force_db_fallback: None,
     ) -> None:
         """flush_counters_to_db returns zero when Redis unavailable — backup key present."""
         from app.core import token_cost_tracker

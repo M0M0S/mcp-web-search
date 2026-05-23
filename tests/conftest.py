@@ -1,11 +1,12 @@
 """pytest configuration for async testing."""
 
 import os
+import sqlite3
 import tempfile
 from typing import Generator
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 # Configure pytest-asyncio mode
 pytest_plugins = ("pytest_asyncio",)
@@ -137,7 +138,7 @@ def force_db_fallback_rate_limiter() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def force_db_fallback_token_cost_tracker() -> Generator[None, None, None]:
+def force_db_fallback() -> Generator[None, None, None]:
     """Force token_cost_tracker to use DB fallback (Redis unavailable).
 
     Sets ``_redis_available = False`` in ``app.core.token_cost_tracker`` and

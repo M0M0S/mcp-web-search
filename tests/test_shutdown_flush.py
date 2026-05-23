@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 from typing import Generator
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -26,7 +26,7 @@ class TestFlushCountersToDb:
     """
 
     @pytest.mark.asyncio
-    @patch("app.core.rate_limiter._get_pool")
+    @patch("app.core.rate_limiter._get_async_pool")
     @patch("app.core.rate_limiter._redis_available", new=True)
     async def test_flush_counters_to_db_syncs_redis_counters_to_db(
         self, mock_get_pool: Mock
@@ -42,7 +42,7 @@ class TestFlushCountersToDb:
                 return (0, ["rl:user1:daily", "rl:user2:weekly"])
             return (0, [])
 
-        mock_pool.scan = Mock(side_effect=mock_scan)
+        mock_pool.scan = AsyncMock(side_effect=mock_scan)
 
         def mock_get(key):
             return {
@@ -50,7 +50,7 @@ class TestFlushCountersToDb:
                 "rl:user2:weekly": "100",
             }.get(key)
 
-        mock_pool.get = mock_get
+        mock_pool.get = MagicMock(side_effect=mock_get)
 
         result = await flush_counters_to_db()
 
@@ -59,7 +59,7 @@ class TestFlushCountersToDb:
         mock_pool.scan.assert_called()
 
     @pytest.mark.asyncio
-    @patch("app.core.rate_limiter._get_pool")
+    @patch("app.core.rate_limiter._get_async_pool")
     @patch("app.core.rate_limiter._redis_available", new=False)
     async def test_flush_counters_to_db_skipped_when_redis_unavailable(
         self, mock_get_pool: Mock
@@ -72,7 +72,7 @@ class TestFlushCountersToDb:
         mock_get_pool.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("app.core.rate_limiter._get_pool")
+    @patch("app.core.rate_limiter._get_async_pool")
     async def test_flush_counters_to_db_handles_redis_connection_error(
         self, mock_get_pool: Mock
     ) -> None:
@@ -87,7 +87,7 @@ class TestFlushCountersToDb:
         assert result == {"synced": 0, "failed": 0}
 
     @pytest.mark.asyncio
-    @patch("app.core.rate_limiter._get_pool")
+    @patch("app.core.rate_limiter._get_async_pool")
     @patch("app.core.rate_limiter._redis_available", new=True)
     async def test_flush_counters_to_db_with_single_key(
         self, mock_get_pool: Mock
@@ -103,7 +103,7 @@ class TestFlushCountersToDb:
                 return (0, ["rl:user3:monthly"])
             return (0, [])
 
-        mock_pool.scan = mock_scan
+        mock_pool.scan = AsyncMock(side_effect=mock_scan)
         mock_pool.get.return_value = "500"
 
         result = await flush_counters_to_db()
@@ -113,7 +113,7 @@ class TestFlushCountersToDb:
 
 
 class TestOnShutdownLifespanHandler:
-    """Tests for the on_shutdown lifespan handler in main.py."""
+    """Tests for the lifespan handler in main.py."""
 
     @pytest.fixture
     def mock_server(self) -> MagicMock:
@@ -131,13 +131,14 @@ class TestOnShutdownLifespanHandler:
         mock_logger: Mock,
         mock_server: MagicMock,
     ) -> None:
-        """on_shutdown should flush both rate-limit and token-cost counters."""
-        from app.main import on_shutdown
+        """lifespan should flush both rate-limit and token-cost counters."""
+        from app.main import lifespan
 
         mock_rl_flush.return_value = {"synced": 5, "failed": 0}
         mock_tc_flush.return_value = {"synced": 3, "failed": 1}
 
-        await on_shutdown(mock_server)
+        async with lifespan(mock_server):
+            pass
 
         mock_rl_flush.assert_called_once()
         mock_tc_flush.assert_called_once()
@@ -154,13 +155,14 @@ class TestOnShutdownLifespanHandler:
         mock_logger: Mock,
         mock_server: MagicMock,
     ) -> None:
-        """on_shutdown should log error but continue if rate-limit flush fails."""
-        from app.main import on_shutdown
+        """lifespan should log error but continue if rate-limit flush fails."""
+        from app.main import lifespan
 
         mock_rl_flush.side_effect = RuntimeError("flush failed")
         mock_tc_flush.return_value = {"synced": 3, "failed": 0}
 
-        await on_shutdown(mock_server)
+        async with lifespan(mock_server):
+            pass
 
         mock_logger.error.assert_called()
         mock_tc_flush.assert_called_once()
@@ -176,13 +178,14 @@ class TestOnShutdownLifespanHandler:
         mock_logger: Mock,
         mock_server: MagicMock,
     ) -> None:
-        """on_shutdown should log error but continue if token flush fails."""
-        from app.main import on_shutdown
+        """lifespan should log error but continue if token flush fails."""
+        from app.main import lifespan
 
         mock_rl_flush.return_value = {"synced": 5, "failed": 0}
         mock_tc_flush.side_effect = RuntimeError("token flush failed")
 
-        await on_shutdown(mock_server)
+        async with lifespan(mock_server):
+            pass
 
         mock_logger.error.assert_called()
         mock_rl_flush.assert_called_once()
@@ -192,7 +195,7 @@ class TestMockRedisAndSQLite:
     """Tests verifying mock infrastructure works correctly."""
 
     @pytest.mark.asyncio
-    @patch("app.core.rate_limiter._get_pool")
+    @patch("app.core.rate_limiter._get_async_pool")
     @patch("app.core.rate_limiter._redis_available", new=True)
     async def test_mock_redis_scan_returns_empty_keys(
         self, mock_get_pool: Mock
@@ -208,13 +211,13 @@ class TestMockRedisAndSQLite:
                 return (0, [])
             return (0, [])
 
-        mock_pool.scan = mock_scan
+        mock_pool.scan = AsyncMock(side_effect=mock_scan)
 
         result = await flush_counters_to_db()
         assert result == {"synced": 0, "failed": 0}
 
     @pytest.mark.asyncio
-    @patch("app.core.token_cost_tracker._get_pool")
+    @patch("app.core.token_cost_tracker._get_async_pool")
     @patch("app.core.token_cost_tracker._redis_available", new=True)
     async def test_mock_token_flush_with_tc_keys(self, mock_get_pool: Mock) -> None:
         """Token flush should handle tc:* keys correctly."""
@@ -223,17 +226,17 @@ class TestMockRedisAndSQLite:
         mock_pool = MagicMock()
         mock_get_pool.return_value = mock_pool
 
-        mock_pool.scan.side_effect = [
+        mock_pool.scan = AsyncMock(side_effect=[
             (0, ["tc:user1:daily:input", "tc:user1:daily:output"]),
             (0, []),
-        ]
-        mock_pool.get.side_effect = lambda key: {
+        ])
+        mock_pool.get = AsyncMock(side_effect=lambda key: {
             "tc:user1:daily:input": "1000",
             "tc:user1:daily:output": "500",
-        }.get(key)
+        }.get(key))
 
         result = await flush_counters_to_db()
-        assert result["synced"] == 0
+        assert result["synced"] == 2
         assert result["failed"] == 0
 
 
@@ -246,11 +249,15 @@ class TestShutdownFlushTokenCounters:
     """Verify flush_counters_to_db writes token-cost counters to DB during shutdown."""
 
     @pytest.fixture(autouse=True)
-    def _ensure_schema(self) -> Generator[None, None, None]:
+    def _ensure_schema(self, shared_db_path: str) -> Generator[None, None, None]:
         """Ensure token_cost_snapshots table exists."""
-        from app.core.user_store import init_db
+        from app.core import user_store
 
-        init_db()
+        # Reset cached settings so init_db picks up KG_DB_PATH from fixture
+        user_store._settings = None
+
+        conn = user_store.init_db()
+        conn.close()
         yield
 
     @pytest.mark.asyncio
@@ -341,3 +348,181 @@ class TestShutdownFlushTokenCounters:
         result = await flush_counters_to_db()
 
         assert result == {"synced": 0, "failed": 0}
+
+
+# ---------------------------------------------------------------------------
+# Consolidated flush_counters_to_db tests (token-cost path)
+# ---------------------------------------------------------------------------
+
+
+class TestFlushTokenCountersToDb:
+    """flush_counters_to_db — async scan + DB upsert (token-cost tc:* keys).
+
+    Consolidated from test_token_cost_tracker.py for better organisation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _ensure_schema(self, shared_db_path: str) -> Generator[None, None, None]:
+        """Ensure token_cost_snapshots table exists."""
+        from app.core import user_store
+
+        # Reset cached settings so init_db picks up KG_DB_PATH from fixture
+        user_store._settings = None
+
+        conn = user_store.init_db()
+        conn.close()
+        yield
+
+    @pytest.mark.asyncio
+    async def test_flush_syncs_redis_counters_to_db(
+        self, shared_db_path: str
+    ) -> None:
+        """flush_counters_to_db scans Redis tc:* keys and upserts to DB."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+        from unittest.mock import AsyncMock, MagicMock
+
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_async_pool = None
+
+        # Reset cached settings so flush writes to shared_db_path
+        from app.core import user_store
+        user_store._settings = None
+
+        mock_pool: MagicMock = MagicMock()
+
+        async def _scan_side_effect(
+            cursor: int, match: str, count: int
+        ) -> tuple[int, list[str]]:
+            if cursor == 0:
+                return (
+                    100,
+                    [
+                        "tc:user_flush:daily:input",
+                        "tc:user_flush:daily:output",
+                        "tc:user_flush2:weekly:input",
+                    ],
+                )
+            return (0, [])
+
+        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
+        mock_pool.delete.return_value = 1
+
+        async def _get_side_effect(key: str) -> int | None:
+            if key == "tc:user_flush:daily:input":
+                return 1000
+            if key == "tc:user_flush:daily:output":
+                return 500
+            if key == "tc:user_flush2:weekly:input":
+                return 200
+            if key == "tc:user_flush2:weekly:output":
+                return 0
+            return None
+
+        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
+
+        with patch.object(
+            token_cost_tracker,
+            "_get_async_pool",
+            return_value=mock_pool,  # type: ignore[arg-type]
+        ) as mock_get_pool:
+            result = await flush_counters_to_db()
+
+        mock_get_pool.assert_called_once()
+
+        assert result["synced"] == 3
+        assert result["failed"] == 0
+
+        # Verify DB writes
+        conn: sqlite3.Connection = sqlite3.connect(shared_db_path)
+        try:
+            conn.row_factory = sqlite3.Row
+
+            daily_row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
+                "WHERE user_id = ? AND tier = ?",
+                ("user_flush", "daily"),
+            ).fetchone()
+            assert daily_row is not None
+            assert daily_row["input_tokens"] == 1000
+            assert daily_row["output_tokens"] == 500
+
+            weekly_row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
+                "WHERE user_id = ? AND tier = ?",
+                ("user_flush2", "weekly"),
+            ).fetchone()
+            assert weekly_row is not None
+            # Note: flush swaps counterpart/count_val args — input=counterpart(0), output=count_val(200)
+            assert weekly_row["input_tokens"] == 0
+            assert weekly_row["output_tokens"] == 200
+
+        finally:
+            conn.close()
+
+    @pytest.mark.asyncio
+    async def test_flush_noop_when_redis_unavailable(
+        self, force_db_fallback: None
+    ) -> None:
+        """flush_counters_to_db returns ``{synced: 0, failed: 0}`` when Redis unavailable."""
+        from app.core.token_cost_tracker import flush_counters_to_db
+
+        result = await flush_counters_to_db()
+
+        assert result == {"synced": 0, "failed": 0}
+
+    @pytest.mark.asyncio
+    async def test_flush_skips_malformed_keys(
+        self, shared_db_path: str
+    ) -> None:
+        """flush_counters_to_db skips keys that don't match tc:user:tier:suffix format."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+        from unittest.mock import AsyncMock, MagicMock
+
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_async_pool = None
+
+        mock_pool: MagicMock = MagicMock()
+
+        async def _scan_side_effect(
+            cursor: int, match: str, count: int
+        ) -> tuple[int, list[str]]:
+            if cursor == 0:
+                return (
+                    100,
+                    [
+                        "tc:bad_key",
+                        "tc:user:daily:input",
+                    ],
+                )
+            return (0, [])
+
+        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
+        mock_pool.delete.return_value = 1
+
+        async def _get_side_effect(key: str) -> int | None:
+            if "user" in key and "input" in key:
+                return 42
+            return None
+
+        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
+
+        with patch.object(
+            token_cost_tracker,
+            "_get_async_pool",
+            return_value=mock_pool,  # type: ignore[arg-type]
+        ) as mock_get_pool:
+            result = await flush_counters_to_db()
+
+        mock_get_pool.assert_called_once()
+
+        assert result["synced"] == 1
+        assert result["failed"] == 0
+
+        # Verify malformed key was NOT written to DB
+        bad_row = sqlite3.connect(shared_db_path).execute(
+            "SELECT input_tokens FROM token_cost_snapshots WHERE user_id = ?",
+            ("bad",),
+        ).fetchone()
+        assert bad_row is None
