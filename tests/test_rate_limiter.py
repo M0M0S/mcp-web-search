@@ -6,17 +6,16 @@ and tier TTL constants.
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from typing import Generator
-
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def shared_db(shared_db_path: str) -> sqlite3.Connection:
@@ -84,6 +83,7 @@ def force_db_fallback() -> Generator[None, None, None]:
 # 1. Redis counter operations (mocked — DB fallback path)
 # ---------------------------------------------------------------------------
 
+
 class TestCounterOperations:
     """incr, get, check against limit via mocked Redis."""
 
@@ -139,7 +139,9 @@ class TestCounterOperations:
         assert result["limit"] == 100
         assert result["remaining"] == 100
 
-    def test_check_rate_limit_counter_reflected(self, mock_redis_pool: MagicMock) -> None:
+    def test_check_rate_limit_counter_reflected(
+        self, mock_redis_pool: MagicMock
+    ) -> None:
         """check_rate_limit reflects current counter value via mocked Redis."""
         from app.core.rate_limiter import check_rate_limit, increment_counter
 
@@ -160,23 +162,30 @@ class TestCounterOperations:
 # 2. Redis fallback — DB counters when Redis unavailable
 # ---------------------------------------------------------------------------
 
+
 class TestRedisFallback:
     """DB fallback path when Redis is unavailable."""
 
-    def test_fallback_increment(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_fallback_increment(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """increment_counter works via DB when Redis unavailable."""
         from app.core.rate_limiter import increment_counter
 
         assert increment_counter("fallback_user", "weekly") == 1
 
-    def test_fallback_get_counter(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_fallback_get_counter(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """get_counter reads from DB when Redis unavailable."""
         from app.core.rate_limiter import get_counter, increment_counter
 
         increment_counter("fallback_user", "monthly")
         assert get_counter("fallback_user", "monthly") == 1
 
-    def test_fallback_check_rate_limit(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_fallback_check_rate_limit(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """check_rate_limit uses DB when Redis unavailable."""
         from app.core.rate_limiter import check_rate_limit, increment_counter
 
@@ -194,10 +203,13 @@ class TestRedisFallback:
 # 3. Rate limit boundary cases
 # ---------------------------------------------------------------------------
 
+
 class TestRateLimitBoundary:
     """Exactly at limit, over limit — DB fallback path."""
 
-    def test_exactly_at_limit_not_allowed(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_exactly_at_limit_not_allowed(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """Counter exactly at limit → allowed=False."""
         from app.core.rate_limiter import check_rate_limit, increment_counter
 
@@ -213,7 +225,9 @@ class TestRateLimitBoundary:
         assert result["current"] == limit
         assert result["remaining"] == 0
 
-    def test_one_below_limit_allowed(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_one_below_limit_allowed(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """Counter one below limit → allowed=True."""
         from app.core.rate_limiter import check_rate_limit, increment_counter
 
@@ -228,7 +242,9 @@ class TestRateLimitBoundary:
         assert result["allowed"] is True
         assert result["remaining"] == 1
 
-    def test_over_limit_remaining_zero(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_over_limit_remaining_zero(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """Counter over limit → remaining=0 (max(0, limit - current))."""
         from app.core.rate_limiter import check_rate_limit, increment_counter
 
@@ -247,12 +263,15 @@ class TestRateLimitBoundary:
 # 4. Counter sync to DB — rate_limit_snapshots upsert
 # ---------------------------------------------------------------------------
 
+
 class TestCounterSyncToDB:
     """sync_to_db upserts rate_limit_snapshots — DB fallback path."""
 
-    def test_sync_creates_snapshot(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_sync_creates_snapshot(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """sync_to_db creates a rate_limit_snapshot row."""
-        from app.core.rate_limiter import sync_to_db, increment_counter
+        from app.core.rate_limiter import increment_counter, sync_to_db
 
         user_id: str = "sync_user"
         tier: str = "daily"
@@ -268,9 +287,11 @@ class TestCounterSyncToDB:
         assert row is not None
         assert row[0] == 1
 
-    def test_sync_upserts_existing(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_sync_upserts_existing(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """sync_to_db updates existing snapshot."""
-        from app.core.rate_limiter import sync_to_db, increment_counter
+        from app.core.rate_limiter import increment_counter, sync_to_db
 
         user_id: str = "sync_user_2"
         tier: str = "weekly"
@@ -298,6 +319,7 @@ class TestCounterSyncToDB:
 # ---------------------------------------------------------------------------
 # 5. Tier TTL — daily=86400, weekly=604800, monthly=2592000
 # ---------------------------------------------------------------------------
+
 
 class TestTierTTL:
     """DEFAULT_TTLS values."""
@@ -330,6 +352,7 @@ class TestTierTTL:
 # ---------------------------------------------------------------------------
 # 6. restore_redis
 # ---------------------------------------------------------------------------
+
 
 class TestRestoreRedis:
     """restore_redis marks Redis as available."""

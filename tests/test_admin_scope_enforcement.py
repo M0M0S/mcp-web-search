@@ -12,9 +12,7 @@ import os
 from typing import Any
 
 import pytest
-
-from fastmcp.server.auth import AuthContext, AccessToken, require_scopes
-
+from fastmcp.server.auth import AccessToken, AuthContext, require_scopes
 
 # ---------------------------------------------------------------------------
 # Minimal helper: create AccessToken / AuthContext with given scopes
@@ -59,12 +57,12 @@ class TestRequireScopesDecoratorApplied:
     ) -> None:
         """register_user_manage_tools must decorate every tool with require_scopes('admin')."""
         from app.tools.user_manage import (
+            check_limits,
+            check_token_usage,
             create_user,
             list_users,
             revoke_user,
             rotate_key,
-            check_limits,
-            check_token_usage,
             update_limits,
             update_token_limits,
         )
@@ -203,9 +201,7 @@ class TestAdminKeyIdsParsingReal:
         parsed = self._parse_admin_key_ids(raw)
         assert parsed == []
 
-    def test_admin_key_ids_single_value(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_admin_key_ids_single_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ADMIN_KEY_IDS must parse single value correctly."""
         monkeypatch.setenv("ADMIN_KEY_IDS", "key_single")
 

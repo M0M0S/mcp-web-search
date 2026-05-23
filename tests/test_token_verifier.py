@@ -10,15 +10,14 @@ import os
 import sqlite3
 import tempfile
 from typing import Generator
-
-import hmac
-import pytest
 from unittest.mock import patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def shared_db_path() -> Generator[str, None, None]:
@@ -72,7 +71,9 @@ def shared_db(shared_db_path: str) -> sqlite3.Connection:
 
 
 @pytest.fixture
-def valid_user(shared_db: sqlite3.Connection, mcp_encryption_key: str) -> Generator[dict, None, None]:
+def valid_user(
+    shared_db: sqlite3.Connection, mcp_encryption_key: str
+) -> Generator[dict, None, None]:
     """Create a user with a valid encrypted key.
 
     Uses mock decrypt_key to return raw_key so that verify_token passes hmac.compare_digest.
@@ -141,6 +142,7 @@ def _mock_decrypt_key(valid_user: dict | None) -> Generator[None, None, None]:
 # 1. verify_token — valid token → AccessToken with claims
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyTokenValid:
     """verify_token returns AccessToken for valid tokens."""
 
@@ -164,18 +166,27 @@ class TestVerifyTokenValid:
         """Return a valid token string for the test user."""
         return f"key_{mock_user['key_id']}"
 
-    def test_verify_token_returns_access_token(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_returns_access_token(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """Valid token → AccessToken (not None)."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate, \
-             patch("app.core.token_verifier.increment_counter") as mock_incr, \
-             patch("app.core.token_verifier.check_token_limits") as mock_token:
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+            patch("app.core.token_verifier.increment_counter") as mock_incr,
+            patch("app.core.token_verifier.check_token_limits") as mock_token,
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
             mock_incr.return_value = 1
             mock_token.return_value = {"exceeded": False, "warning": None}
 
@@ -188,103 +199,157 @@ class TestVerifyTokenValid:
             assert hasattr(result, "status")
             assert hasattr(result, "claims")
 
-    def test_verify_token_claims_contain_user_id(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_claims_contain_user_id(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken claims include user_id."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
             assert result.claims["user_id"] == mock_user["user_id"]
 
-    def test_verify_token_claims_contain_key_id(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_claims_contain_key_id(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken claims include key_id."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
             assert result.claims["key_id"] == mock_user["key_id"]
 
-    def test_verify_token_claims_contain_scopes(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_claims_contain_scopes(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken claims include scopes."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
             assert "scopes" in result.claims
 
-    def test_verify_token_claims_contain_status(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_claims_contain_status(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken claims include status."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
             assert result.claims["status"] == "active"
 
-    def test_verify_token_user_id_matches(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_user_id_matches(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken.user_id matches DB user."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
             assert result.user_id == mock_user["user_id"]
 
-    def test_verify_token_key_id_matches(self, valid_token: str, mock_user: dict) -> None:
+    def test_verify_token_key_id_matches(
+        self, valid_token: str, mock_user: dict
+    ) -> None:
         """AccessToken.key_id matches DB user."""
         from app.core.token_verifier import verify_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             result = verify_token(valid_token)
 
@@ -294,6 +359,7 @@ class TestVerifyTokenValid:
 # ---------------------------------------------------------------------------
 # 2. validate_token — valid → True, invalid → False
 # ---------------------------------------------------------------------------
+
 
 class TestValidateToken:
     """validate_token returns bool."""
@@ -316,18 +382,27 @@ class TestValidateToken:
     def mock_valid_token(self, mock_valid_user: dict) -> str:
         return f"key_{mock_valid_user['key_id']}"
 
-    def test_validate_valid_token(self, mock_valid_token: str, mock_valid_user: dict) -> None:
+    def test_validate_valid_token(
+        self, mock_valid_token: str, mock_valid_user: dict
+    ) -> None:
         """Valid token → True."""
         from app.core.token_verifier import validate_token
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_valid_user
             mock_decrypt.return_value = mock_valid_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
 
             assert validate_token(mock_valid_token) is True
 
@@ -347,6 +422,7 @@ class TestValidateToken:
 # ---------------------------------------------------------------------------
 # 3. Invalid token → None + audit event invalid_token
 # ---------------------------------------------------------------------------
+
 
 class TestInvalidToken:
     """Invalid token handling."""
@@ -378,12 +454,19 @@ class TestInvalidToken:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate:
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["raw_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
             assert verify_token("key_wrong_key_value") is None
 
     def test_none_encrypted_key_returns_none(self) -> None:
@@ -420,17 +503,24 @@ class TestRevokedUser:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate:
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["encrypted_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
             assert verify_token("key_test") is None
 
     def test_revoked_user_status_in_db(self, shared_db: sqlite3.Connection) -> None:
         """After revoke, user status is 'revoked' in DB."""
-        from app.core.user_store import create_user, revoke_user, get_user_by_id
+        from app.core.user_store import create_user, get_user_by_id, revoke_user
 
         user = create_user(name="revoked_test_user")
         revoke_user(user["user_id"])
@@ -454,17 +544,24 @@ class TestDisabledUser:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate:
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["encrypted_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
             assert verify_token("key_test") is None
 
     def test_disabled_user_status_in_db(self, shared_db: sqlite3.Connection) -> None:
         """After disable, user status is 'disabled' in DB."""
-        from app.core.user_store import create_user, update_user, get_user_by_id
+        from app.core.user_store import create_user, get_user_by_id, update_user
 
         user = create_user(name="disabled_test_user")
         update_user(user["user_id"], status="disabled")
@@ -475,6 +572,7 @@ class TestDisabledUser:
 # ---------------------------------------------------------------------------
 # 6. Rate limit exceeded → None + audit event rate_limit_exceeded
 # ---------------------------------------------------------------------------
+
 
 class TestRateLimitExceeded:
     """Rate limit enforcement."""
@@ -492,12 +590,19 @@ class TestRateLimitExceeded:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate:
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["encrypted_key"]
-            mock_rate.return_value = {"allowed": False, "current": 100, "limit": 100, "remaining": 0}
+            mock_rate.return_value = {
+                "allowed": False,
+                "current": 100,
+                "limit": 100,
+                "remaining": 0,
+            }
             assert verify_token("key_test") is None
 
     def test_rate_limit_boundary_one_below(self) -> None:
@@ -513,14 +618,21 @@ class TestRateLimitExceeded:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.token_verifier.check_rate_limit") as mock_rate, \
-             patch("app.core.token_verifier.increment_counter") as mock_incr, \
-             patch("app.core.token_verifier.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.token_verifier.check_rate_limit") as mock_rate,
+            patch("app.core.token_verifier.increment_counter") as mock_incr,
+            patch("app.core.token_verifier.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["encrypted_key"]
-            mock_rate.return_value = {"allowed": True, "current": 99, "limit": 100, "remaining": 1}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 99,
+                "limit": 100,
+                "remaining": 1,
+            }
             mock_incr.return_value = 100
             result = verify_token("key_test")
             assert result is not None
@@ -530,13 +642,15 @@ class TestRateLimitExceeded:
 # 7. Constant-time comparison — hmac.compare_digest
 # ---------------------------------------------------------------------------
 
+
 class TestConstantTimeComparison:
     """verify_token uses hmac.compare_digest for token comparison."""
 
     def test_hmac_compare_digest_used(self) -> None:
         """verify_token source contains hmac.compare_digest call."""
-        from app.core import token_verifier
         import inspect
+
+        from app.core import token_verifier
 
         source: str = inspect.getsource(token_verifier.verify_token)
 
@@ -552,6 +666,7 @@ class TestConstantTimeComparison:
 # ---------------------------------------------------------------------------
 # 8. Additional helpers
 # ---------------------------------------------------------------------------
+
 
 class TestHelperFunctions:
     """get_auth_context, create_access_token, get_admin_key_ids, check_user_status."""
@@ -569,14 +684,21 @@ class TestHelperFunctions:
             "scopes": ["read"],
         }
 
-        with patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user, \
-             patch("app.core.token_verifier.decrypt_key") as mock_decrypt, \
-             patch("app.core.rate_limiter.check_rate_limit") as mock_rate, \
-             patch("app.core.rate_limiter.increment_counter"), \
-             patch("app.core.token_cost_tracker.check_token_limits"):
+        with (
+            patch("app.core.token_verifier.get_user_by_key_id") as mock_get_user,
+            patch("app.core.token_verifier.decrypt_key") as mock_decrypt,
+            patch("app.core.rate_limiter.check_rate_limit") as mock_rate,
+            patch("app.core.rate_limiter.increment_counter"),
+            patch("app.core.token_cost_tracker.check_token_limits"),
+        ):
             mock_get_user.return_value = mock_user
             mock_decrypt.return_value = mock_user["encrypted_key"]
-            mock_rate.return_value = {"allowed": True, "current": 0, "limit": 100, "remaining": 100}
+            mock_rate.return_value = {
+                "allowed": True,
+                "current": 0,
+                "limit": 100,
+                "remaining": 100,
+            }
             context = get_auth_context("key_test")
             assert context is not None
             assert "user_id" in context

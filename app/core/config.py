@@ -259,9 +259,7 @@ class Settings(BaseSettings):
         """Parse ADMIN_KEY_IDS from comma-separated string in .env into list."""
         raw = os.getenv("ADMIN_KEY_IDS", "")
         if raw:
-            self.ADMIN_KEY_IDS = [
-                k.strip() for k in raw.split(",") if k.strip()
-            ]
+            self.ADMIN_KEY_IDS = [k.strip() for k in raw.split(",") if k.strip()]
         return self
 
     # Rate Limit Defaults

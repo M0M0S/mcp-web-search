@@ -38,6 +38,7 @@ def _get_settings() -> Settings:
         _settings = Settings()
     return _settings
 
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -163,7 +164,10 @@ def _get_counter_with_fallback(
 
     # TTL-based recovery: schedule async ping if previously marked unavailable
     if not _redis_available:
-        if _redis_last_check > 0 and time.time() - _redis_last_check > REDIS_HEALTH_CHECK_INTERVAL:
+        if (
+            _redis_last_check > 0
+            and time.time() - _redis_last_check > REDIS_HEALTH_CHECK_INTERVAL
+        ):
             # Schedule non-blocking recovery ping — current call returns DB fallback
             _schedule_redis_recovery()
             return (
@@ -586,9 +590,7 @@ async def flush_counters_to_db() -> dict[str, int]:
 
     cursor: int = 0
     while True:
-        cursor, keys = await pool.scan(
-            cursor=cursor, match="tc:*", count=100
-        )
+        cursor, keys = await pool.scan(cursor=cursor, match="tc:*", count=100)
         if not keys:
             if cursor == 0:
                 break

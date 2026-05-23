@@ -13,7 +13,6 @@ from app.models.webfetch import (
     WebFetchState,
 )
 
-
 # ─── Integration tests: full pipeline ───
 
 

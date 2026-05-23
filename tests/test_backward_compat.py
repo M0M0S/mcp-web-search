@@ -6,8 +6,6 @@ MCP_ENCRYPTION_KEY is absent, empty, whitespace-only, or present.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from cryptography.fernet import Fernet
 

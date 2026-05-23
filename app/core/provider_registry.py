@@ -11,7 +11,6 @@ from ddgs import DDGS
 
 # Lazy import tavily to avoid mypy import-untyped error at module level
 # TavilyClient is imported inside _probe_tavily() method only
-
 from app.core.logging import get_logger
 from app.core.metrics import (
     get_metrics_bytes,
@@ -473,7 +472,7 @@ class ProviderHealthProbe:
         if not api_key:
             return False
 
-        from tavily import TavilyClient  # type: ignore[import-untyped]  # no official stubs
+        from tavily import TavilyClient  # type: ignore[import-untyped]
 
         client = TavilyClient(api_key=api_key)
         try:

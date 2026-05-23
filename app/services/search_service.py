@@ -10,7 +10,6 @@ from ddgs import DDGS
 
 # Lazy import tavily to avoid mypy import-untyped error at module level
 # TavilyClient is imported inside _search_tavily() method only
-
 from app.core.config import Provider, Settings
 from app.core.llm_client import create_llm_client
 from app.core.logging import get_logger
@@ -256,7 +255,7 @@ class SearchService:
             logger.warning(f"Provider {provider} unavailable (missing TAVILY_API_KEY)")
             return None
 
-        from tavily import TavilyClient  # type: ignore[import-untyped]  # no official stubs
+        from tavily import TavilyClient  # type: ignore[import-untyped]
 
         client = TavilyClient(api_key=api_key)
 

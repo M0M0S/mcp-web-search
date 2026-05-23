@@ -8,18 +8,34 @@ table with threading.Lock for single-process atomicity.
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import datetime
+import sqlite3
 import threading
 import time
 from typing import Final
 
 import redis
+import redis.asyncio as redis_async
 import structlog
 
 from app.core.config import Settings
 
 logger = structlog.get_logger("rate_limiter")
+
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -53,12 +69,13 @@ _db_lock: Final[threading.Lock] = threading.Lock()
 # ---------------------------------------------------------------------------
 
 _redis_pool: redis.Redis | None = None
+_redis_async_pool: redis_async.Redis | None = None
 _redis_available: bool = True
 _redis_last_check: float = 0.0
 
 
 def _get_pool(settings: Settings) -> redis.Redis:
-    """Return (or create) the Redis connection pool."""
+    """Return (or create) the sync Redis connection pool."""
     global _redis_pool
     if _redis_pool is None:
         _redis_pool = redis.from_url(
@@ -69,6 +86,20 @@ def _get_pool(settings: Settings) -> redis.Redis:
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
         )
     return _redis_pool
+
+
+def _get_async_pool(settings: Settings) -> redis_async.Redis:
+    """Return (or create) the async Redis connection pool."""
+    global _redis_async_pool
+    if _redis_async_pool is None:
+        _redis_async_pool = redis_async.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_timeout=REDIS_TIMEOUT,
+            socket_connect_timeout=REDIS_TIMEOUT,
+            health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
+        )
+    return _redis_async_pool
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +149,7 @@ def auto_fallback() -> bool:
     _redis_last_check = now
 
     try:
-        pool = _get_pool(Settings())
+        pool = _get_pool(_get_settings())
         pool.ping()
         if not _redis_available:
             logger.info("redis_recovered")
@@ -169,7 +200,7 @@ def check_rate_limit(
 
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
+            pool = _get_pool(_get_settings())
             key = _redis_key(user_id, tier)
             current = pool.get(key)  # type: ignore[assignment]
             if current is None:
@@ -216,7 +247,7 @@ def increment_counter(
 
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
+            pool = _get_pool(_get_settings())
             key = _redis_key(user_id, tier)
             ttl = _get_tier_ttl(tier)
             new_count = pool.incr(key)  # type: ignore[assignment]
@@ -249,7 +280,7 @@ def sync_to_db(
     """
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
+            pool = _get_pool(_get_settings())
             key = _redis_key(user_id, tier)
             count = pool.get(key)  # type: ignore[assignment]
             if count is None:
@@ -289,7 +320,7 @@ def get_counter(
 
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
+            pool = _get_pool(_get_settings())
             key = _redis_key(user_id, tier)
             value = pool.get(key)  # type: ignore[assignment]
             if value is None:
@@ -323,8 +354,8 @@ async def flush_counters_to_db() -> dict[str, int]:
         return {"synced": 0, "failed": 0}
 
     try:
-        pool = _get_pool(Settings())
-    except (redis.ConnectionError, redis.TimeoutError, OSError) as exc:
+        pool = _get_async_pool(_get_settings())
+    except (redis_async.ConnectionError, redis_async.TimeoutError, OSError) as exc:
         logger.warning("flush_redis_error", error=str(exc))
         _redis_available = False
         return {"synced": 0, "failed": 0}
@@ -334,9 +365,7 @@ async def flush_counters_to_db() -> dict[str, int]:
 
     cursor: int = 0
     while True:
-        cursor, keys = await pool.scan(  # type: ignore[assignment]
-            cursor=cursor, match="rl:*", count=100
-        )
+        cursor, keys = await pool.scan(cursor=cursor, match="rl:*", count=100)
         if not keys:  # type: ignore[union-attr]
             if cursor == 0:
                 break

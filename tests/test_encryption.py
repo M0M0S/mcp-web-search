@@ -14,10 +14,10 @@ from typing import Generator
 import pytest
 from cryptography.fernet import Fernet
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_encryption_globals() -> Generator[None, None, None]:
@@ -65,6 +65,7 @@ def mcp_backup_key() -> str:
 # ---------------------------------------------------------------------------
 # 1. Encryption / Decryption roundtrip
 # ---------------------------------------------------------------------------
+
 
 class TestEncryptionRoundtrip:
     """Fernet encrypt → decrypt = original."""
@@ -120,15 +121,20 @@ class TestEncryptionRoundtrip:
 # 2. Key rotation (migrate_keys)
 # ---------------------------------------------------------------------------
 
+
 class TestKeyRotation:
     """rotate_key via migrate_keys — old key decrypts, new key decrypts."""
 
-    def test_migrate_keys_decrypts_with_backup(self, mcp_encryption_key: str, mcp_backup_key: str) -> None:
+    def test_migrate_keys_decrypts_with_backup(
+        self, mcp_encryption_key: str, mcp_backup_key: str
+    ) -> None:
         """Keys encrypted with backup key are successfully migrated."""
-        from app.core.encryption import encrypt_key, migrate_keys
+        from app.core.encryption import migrate_keys
 
         raw: str = secrets.token_urlsafe(32)
-        encrypted_with_backup: str = Fernet(mcp_backup_key.encode()).encrypt(raw.encode()).hex()
+        encrypted_with_backup: str = (
+            Fernet(mcp_backup_key.encode()).encrypt(raw.encode()).hex()
+        )
 
         keys: list[dict[str, str]] = [
             {"key_id": "user_1", "encrypted_key": encrypted_with_backup},
@@ -142,7 +148,7 @@ class TestKeyRotation:
 
     def test_migrate_keys_fails_with_wrong_key(self, mcp_encryption_key: str) -> None:
         """Keys encrypted with a key different from backup_key fail."""
-        from app.core.encryption import encrypt_key, migrate_keys
+        from app.core.encryption import migrate_keys
 
         # Create a key that is NOT the backup key
         wrong_key: str = Fernet.generate_key().decode("utf-8")
@@ -160,7 +166,9 @@ class TestKeyRotation:
         assert result["success_rate"] == 0.0
         assert len(result["failed"]) == 1
 
-    def test_migrate_keys_empty_list(self, mcp_encryption_key: str, mcp_backup_key: str) -> None:
+    def test_migrate_keys_empty_list(
+        self, mcp_encryption_key: str, mcp_backup_key: str
+    ) -> None:
         """Migrating empty list returns 0.0 success rate."""
         from app.core.encryption import migrate_keys
 
@@ -174,6 +182,7 @@ class TestKeyRotation:
 # ---------------------------------------------------------------------------
 # 3. Key entropy validation
 # ---------------------------------------------------------------------------
+
 
 class TestKeyEntropy:
     """secrets.token_urlsafe(32) produces 192 bits of entropy."""
@@ -201,10 +210,13 @@ class TestKeyEntropy:
 # 4. import_keys — duplicate detection, min 32 chars validation
 # ---------------------------------------------------------------------------
 
+
 class TestImportKeys:
     """import_keys behavior: validation, duplicate handling."""
 
-    def test_import_valid_keys(self, mcp_encryption_key: str, standard_b64_key: str) -> None:
+    def test_import_valid_keys(
+        self, mcp_encryption_key: str, standard_b64_key: str
+    ) -> None:
         """Valid keys (standard base64, 44 chars) are encrypted and returned."""
         from app.core.encryption import import_keys, validate_key_format
 
@@ -220,7 +232,9 @@ class TestImportKeys:
         assert len(result) == 2
         assert all("encrypted_key" in entry for entry in result)
 
-    def test_import_skips_short_key(self, mcp_encryption_key: str, standard_b64_key: str) -> None:
+    def test_import_skips_short_key(
+        self, mcp_encryption_key: str, standard_b64_key: str
+    ) -> None:
         """Keys shorter than 32 chars are skipped."""
         from app.core.encryption import import_keys
 
@@ -235,7 +249,9 @@ class TestImportKeys:
         assert len(result) == 1
         assert result[0]["key_id"] == "ok"
 
-    def test_import_skips_invalid_format(self, mcp_encryption_key: str, standard_b64_key: str) -> None:
+    def test_import_skips_invalid_format(
+        self, mcp_encryption_key: str, standard_b64_key: str
+    ) -> None:
         """Keys that are not valid Fernet format (standard base64, 44 chars) are skipped."""
         from app.core.encryption import import_keys
 
@@ -250,7 +266,9 @@ class TestImportKeys:
         assert len(result) == 1
         assert result[0]["key_id"] == "ok"
 
-    def test_import_duplicate_key_id_renamed(self, mcp_encryption_key: str, standard_b64_key: str) -> None:
+    def test_import_duplicate_key_id_renamed(
+        self, mcp_encryption_key: str, standard_b64_key: str
+    ) -> None:
         """Duplicate key_ids are auto-renamed."""
         from app.core.encryption import import_keys
 
@@ -273,6 +291,7 @@ class TestImportKeys:
 # ---------------------------------------------------------------------------
 # 5. validate_key_format — valid / invalid keys
 # ---------------------------------------------------------------------------
+
 
 class TestValidateKeyFormat:
     """validate_key_format correctness."""
@@ -310,6 +329,7 @@ class TestValidateKeyFormat:
 # 6. validate_backup_key_format
 # ---------------------------------------------------------------------------
 
+
 class TestValidateBackupKeyFormat:
     """validate_backup_key_format mirrors validate_key_format."""
 
@@ -330,12 +350,15 @@ class TestValidateBackupKeyFormat:
         """Backup validation result matches primary for same key."""
         from app.core.encryption import validate_backup_key_format, validate_key_format
 
-        assert validate_backup_key_format(standard_b64_key) == validate_key_format(standard_b64_key)
+        assert validate_backup_key_format(standard_b64_key) == validate_key_format(
+            standard_b64_key
+        )
 
 
 # ---------------------------------------------------------------------------
 # 7. verify_all
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyAll:
     """verify_all — 99% threshold."""
@@ -348,8 +371,7 @@ class TestVerifyAll:
         encrypted: str = encrypt_key(raw)
 
         keys: list[dict[str, str]] = [
-            {"key_id": f"user_{i}", "encrypted_key": encrypted}
-            for i in range(10)
+            {"key_id": f"user_{i}", "encrypted_key": encrypted} for i in range(10)
         ]
 
         assert verify_all(keys) is True
@@ -381,6 +403,7 @@ class TestVerifyAll:
 # ---------------------------------------------------------------------------
 # 8. clear_backup_key
 # ---------------------------------------------------------------------------
+
 
 class TestClearBackupKey:
     """clear_backup_key removes backup from memory."""

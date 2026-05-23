@@ -8,7 +8,6 @@ both rate-limit and token-cost counters.
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 from typing import Generator
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -226,14 +225,18 @@ class TestMockRedisAndSQLite:
         mock_pool = MagicMock()
         mock_get_pool.return_value = mock_pool
 
-        mock_pool.scan = AsyncMock(side_effect=[
-            (0, ["tc:user1:daily:input", "tc:user1:daily:output"]),
-            (0, []),
-        ])
-        mock_pool.get = AsyncMock(side_effect=lambda key: {
-            "tc:user1:daily:input": "1000",
-            "tc:user1:daily:output": "500",
-        }.get(key))
+        mock_pool.scan = AsyncMock(
+            side_effect=[
+                (0, ["tc:user1:daily:input", "tc:user1:daily:output"]),
+                (0, []),
+            ]
+        )
+        mock_pool.get = AsyncMock(
+            side_effect=lambda key: {
+                "tc:user1:daily:input": "1000",
+                "tc:user1:daily:output": "500",
+            }.get(key)
+        )
 
         result = await flush_counters_to_db()
         assert result["synced"] == 2
@@ -381,9 +384,7 @@ class TestFlushTokenCountersToDb:
         yield
 
     @pytest.mark.asyncio
-    async def test_flush_syncs_redis_counters_to_db(
-        self, shared_db_path: str
-    ) -> None:
+    async def test_flush_syncs_redis_counters_to_db(self, shared_db_path: str) -> None:
         """flush_counters_to_db scans Redis tc:* keys and upserts to DB."""
         from app.core import token_cost_tracker
         from app.core.token_cost_tracker import flush_counters_to_db
@@ -394,6 +395,7 @@ class TestFlushTokenCountersToDb:
 
         # Reset cached settings so flush writes to shared_db_path
         from app.core import user_store
+
         user_store._settings = None
 
         mock_pool: MagicMock = MagicMock()
@@ -479,9 +481,7 @@ class TestFlushTokenCountersToDb:
         assert result == {"synced": 0, "failed": 0}
 
     @pytest.mark.asyncio
-    async def test_flush_skips_malformed_keys(
-        self, shared_db_path: str
-    ) -> None:
+    async def test_flush_skips_malformed_keys(self, shared_db_path: str) -> None:
         """flush_counters_to_db skips keys that don't match tc:user:tier:suffix format."""
         from app.core import token_cost_tracker
         from app.core.token_cost_tracker import flush_counters_to_db
@@ -528,8 +528,12 @@ class TestFlushTokenCountersToDb:
         assert result["failed"] == 0
 
         # Verify malformed key was NOT written to DB
-        bad_row = sqlite3.connect(shared_db_path).execute(
-            "SELECT input_tokens FROM token_cost_snapshots WHERE user_id = ?",
-            ("bad",),
-        ).fetchone()
+        bad_row = (
+            sqlite3.connect(shared_db_path)
+            .execute(
+                "SELECT input_tokens FROM token_cost_snapshots WHERE user_id = ?",
+                ("bad",),
+            )
+            .fetchone()
+        )
         assert bad_row is None

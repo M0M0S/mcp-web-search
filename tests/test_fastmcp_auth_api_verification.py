@@ -15,14 +15,17 @@ from __future__ import annotations
 import inspect
 import typing
 from typing import Any, get_type_hints
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+# AuthProvider used in type annotations for FastMCP constructor verification
+from fastmcp.server.auth import AuthProvider
 
 # ---------------------------------------------------------------------------
 # Mock FastMCP module — fastmcp is not installed in test env
 # ---------------------------------------------------------------------------
+
 
 class _MockDebugTokenVerifier:
     """Mock DebugTokenVerifier for testing."""
@@ -94,19 +97,21 @@ class TestFastMcpApiSignatureVerification:
 
         FastMCP 3.2.4 API signature: verify_token(token: str) -> AccessToken | None
         """
-        from app.core.token_verifier import verify_token, AccessToken
+        from app.core.token_verifier import AccessToken, verify_token
 
         hints = get_type_hints(verify_token)
         return_type = hints.get("return")
 
-        assert return_type is not None, "verify_token must have a return type annotation"
+        assert return_type is not None, (
+            "verify_token must have a return type annotation"
+        )
 
         # Actual type check: AccessToken must be one of the union args
         args = typing.get_args(return_type)
         assert len(args) > 0, "return type must have at least one argument"
-        assert AccessToken in args or any(
-            arg is AccessToken for arg in args
-        ), f"AccessToken must be in return type args, got {args}"
+        assert AccessToken in args or any(arg is AccessToken for arg in args), (
+            f"AccessToken must be in return type args, got {args}"
+        )
 
     def test_validate_token_returns_bool(
         self,
@@ -120,7 +125,9 @@ class TestFastMcpApiSignatureVerification:
         hints = get_type_hints(validate_token)
         return_type = hints.get("return")
 
-        assert return_type is not None, "validate_token must have a return type annotation"
+        assert return_type is not None, (
+            "validate_token must have a return type annotation"
+        )
         assert return_type is bool, (
             f"validate_token return type must be exactly bool, got {return_type}"
         )
@@ -179,7 +186,6 @@ class TestFastMcpApiSignatureVerification:
 
         try:
             from fastmcp import FastMCP
-            from app.core.dependencies import PlaceholderAuthClient
 
             sig = inspect.signature(FastMCP.__init__)
             params = sig.parameters
@@ -199,7 +205,9 @@ class TestFastMcpApiSignatureVerification:
                         args = typing.get_args(resolved_auth)
                         assert AuthProvider in args or any(
                             arg is AuthProvider for arg in args
-                        ), f"auth parameter must include AuthProvider in annotation, got {resolved_auth}"
+                        ), (
+                            f"auth parameter must include AuthProvider in annotation, got {resolved_auth}"
+                        )
                 except Exception:
                     # If get_type_hints fails (e.g. unresolved forward refs),
                     # fall back to checking the raw annotation string
@@ -269,7 +277,9 @@ class TestFastMcpApiSignatureVerification:
                     resolved_verifiers = resolved.get("verifiers")
                     if resolved_verifiers is not None:
                         args = typing.get_args(resolved_verifiers)
-                        assert len(args) > 0 or hasattr(resolved_verifiers, "__origin__"), (
+                        assert len(args) > 0 or hasattr(
+                            resolved_verifiers, "__origin__"
+                        ), (
                             f"verifiers annotation must be a typed generic, got {resolved_verifiers}"
                         )
                 except Exception:
@@ -444,7 +454,7 @@ class TestMockFastMcpAuthComponents:
         sys.modules["fastmcp.server.auth"] = fake_server_auth
 
         try:
-            from fastmcp.server.auth import MultiAuth, DebugTokenVerifier
+            from fastmcp.server.auth import DebugTokenVerifier, MultiAuth
 
             mock_validate = MagicMock(return_value=True)
 
