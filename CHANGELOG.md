@@ -10,28 +10,28 @@ All notable changes to this project will be documented in this file.
 - **Settings singleton pattern** — added module-level `_settings` + `_get_settings()` lazy-init getter in `token_cost_tracker.py` and `rate_limiter.py`. Replaced all 11 inline `Settings()` calls with `_get_settings()`, eliminating config drift risk from repeated instantiation. Extended singleton pattern to `main.py`, `user_store.py`, `token_verifier.py`, `user_manage.py`, `webfetch.py`, `content.py`, `search.py` (8 files total).
 - **FastMCP lifespan naming** — renamed `on_shutdown` → `lifespan` in `app/main.py` per FastMCP convention; updated comment from `# Shutdown lifecycle handler` → `# FastMCP lifespan`.
 - **`or 0` guard consolidation** — `_db_get_token_counter` already returns `int` with internal `or 0` guard; callers no longer need scattered guards. Removed redundant guards in `check_token_limits`, `sync_to_db`, `get_token_usage`, `record_tokens`.
-- **Sync/Async Redis mismatch** — `_get_pool()` в `token_cost_tracker.py` и `rate_limiter.py` переключен на `redis.asyncio.Redis`; `flush_counters_to_db()` теперь корректно использует async pool.
-- **asyncio.run() в create_app()** — replaced с `_warm_cache_sync()` helper используя `asyncio.new_event_loop()` + `loop.run_until_complete()`, avoiding `RuntimeError` при nested event loops.
-- **lifespan typing mismatch** — wrapped `lifespan` с `@asynccontextmanager`, generator pattern для FastMCP compatibility.
-- **flush_counters_to_db key-parsing bug** — префикс `tc:` не учитывался при парсинге keys, все keys пропускались. Исправлено: `_, rest = raw.split(":", 1)` strip prefix перед парсингом.
-- **malformed key guard** — added `if rest.count(":") < 2: continue` в `flush_counters_to_db`, предотвращает `ValueError` на malformed Redis keys.
-- **recovery ping race condition** — refactored `_get_counter_with_fallback` с non-blocking async recovery: `_schedule_redis_recovery()` использует `asyncio.create_task()`, current call всегда returns DB fallback.
-- **key-absence bug** — `_get_counter_with_fallback` при `inp is None or out is None` НЕ ставит `_redis_available = False`; Redis key absent ≠ Redis down.
-- **TTL-based health-check recovery** — added `_redis_last_check` guard, retry ping на interval, restore `_redis_available = True` при success.
-- **Redis success path test** — added `test_record_tokens_redis_success_path` с assertion на incrby args, expire TTL, `_redis_available` state preservation.
+- **Sync/Async Redis mismatch** — `_get_pool()` in `token_cost_tracker.py` and `rate_limiter.py` switched to `redis.asyncio.Redis`; `flush_counters_to_db()` now correctly uses async pool.
+- **asyncio.run() in create_app()** — replaced with `_warm_cache_sync()` helper using `asyncio.new_event_loop()` + `loop.run_until_complete()`, avoiding `RuntimeError` in nested event loops.
+- **lifespan typing mismatch** — wrapped `lifespan` with `@asynccontextmanager`, generator pattern for FastMCP compatibility.
+- **flush_counters_to_db key-parsing bug** — `tc:` prefix not stripped during key parsing, all keys skipped. Fixed: `_, rest = raw.split(":", 1)` strips prefix before parsing.
+- **malformed key guard** — added `if rest.count(":") < 2: continue` in `flush_counters_to_db`, prevents `ValueError` on malformed Redis keys.
+- **recovery ping race condition** — refactored `_get_counter_with_fallback` with non-blocking async recovery: `_schedule_redis_recovery()` uses `asyncio.create_task()`, current call always returns DB fallback.
+- **key-absence bug** — `_get_counter_with_fallback` at `inp is None or out is None` does NOT set `_redis_available = False`; Redis key absent ≠ Redis down.
+- **TTL-based health-check recovery** — added `_redis_last_check` guard, retry ping on interval, restore `_redis_available = True` on success.
+- **Redis success path test** — added `test_record_tokens_redis_success_path` with assertion on incrby args, expire TTL, `_redis_available` state preservation.
 
 #### Added
-- **Pre-commit hook** — `uv-lock-sync` hook: `uv lock --check` для синхронизации uv.lock с pyproject.toml
+- **Pre-commit hook** — `uv-lock-sync` hook: `uv lock --check` for uv.lock synchronization with pyproject.toml
 - **Auth tests** — 11 test files, 853 tests (backward compat, shutdown flush, backup key, admin scope, FastMCP API verification)
-- **Malformed key test** — `test_flush_skips_malformed_keys` в `TestFlushTokenCountersToDb`
+- **Malformed key test** — `test_flush_skips_malformed_keys` in `TestFlushTokenCountersToDb`
 - **Shutdown flush token counters tests** — `test_shutdown_flush_token_counters_writes_to_db`, `test_shutdown_flush_token_counters_noop_when_redis_down`
 - **Backup key context tests** — `test_backup_key_does_not_affect_redis_available`, `test_counters_independent_of_encryption_key_state`, `test_flush_counters_noop_with_backup_key_present`
-- **Explicit DB assertion** — `assert bad_row is None` в `test_flush_skips_malformed_keys` для verification malformed key не записан в DB
+- **Explicit DB assertion** — `assert bad_row is None` in `test_flush_skips_malformed_keys` for malformed key not written to DB verification
 
 #### Changed
-- **Russian → English translation** — all project files translated: Makefile, CHANGELOG.md, docker/scripts/setup-env.sh, docs/features_plans/mcp_authorization.md (0 кириллических символов во всём проекте)
-- **Test organization** — consolidated `TestFlushCountersToDB` в `test_shutdown_flush.py` как `TestFlushTokenCountersToDb`; clarified scope boundary между `TestShutdownFlushTokenCounters` и `TestFlushTokenCountersToDb`.
-- **Fixture naming** — standardized `force_db_fallback_token_cost_tracker` → `force_db_fallback` в `conftest.py`.
+- **Russian → English translation** — all project files translated: Makefile, CHANGELOG.md, docker/scripts/setup-env.sh, docs/features_plans/mcp_authorization.md (0 Cyrillic characters in entire project)
+- **Test organization** — consolidated `TestFlushCountersToDB` in `test_shutdown_flush.py` as `TestFlushTokenCountersToDb`; clarified scope boundary between `TestShutdownFlushTokenCounters` and `TestFlushTokenCountersToDb`.
+- **Fixture naming** — standardized `force_db_fallback_token_cost_tracker` → `force_db_fallback` in `conftest.py`.
 - **ruff format** — all files reformatted per ruff standards.
 
 #### Security
