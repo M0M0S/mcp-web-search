@@ -76,6 +76,101 @@ Add to `claude_desktop_config.json`:
 | `content` | Extract text content from URL | `url`, `token_limit` |
 | `webfetch` | Agent-based search via LangGraph | `query`, `max_concurrent` |
 
+### Authorization (MCP_ENCRYPTION_KEY)
+
+When `MCP_ENCRYPTION_KEY` is configured, the server enables user-based authorization:
+
+**API key format**
+
+API keys are issued via the `user_manage` tool. The token presented to the server has the format:
+
+```
+key_<key_id>
+```
+
+where `<key_id>` is a unique identifier (e.g. `key_abc123def456`). The raw key is delivered **one-time only** during user creation — it is never stored in the database or logs after delivery.
+
+**Configuration**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MCP_ENCRYPTION_KEY` | Yes (for auth) | Fernet encryption key (44-char base64, 32 bytes). Validated at startup. |
+| `MCP_ENCRYPTION_KEY_BACKUP` | No | Optional backup Fernet key for recovery after primary key loss. |
+
+**Rate limits** (defaults per user)
+
+| Tier | Default | Redis TTL |
+|------|---------|-----------|
+| Daily | 100 | 86400s |
+| Weekly | 500 | 604800s |
+| Monthly | 2000 | 2592000s |
+
+Rate limits are configurable per user via `user_manage update_limits`.
+
+**Token cost tracking**
+
+Per-user LLM token consumption is tracked per tier (daily/weekly/monthly) for billing and quota visibility:
+
+- **Input tokens** — query length + context
+- **Output tokens** — response + extracted content
+- Token limits default to **unlimited** (NULL) — configurable via `user_manage update_token_limits`
+- Token cost tracking is **informational only** (warning on limit exceeded, not hard block)
+- Rate limits enforce actual usage (hard block on limit exceeded)
+
+**`user_manage` tool** (admin scope required)
+
+| Action | Parameters | Output |
+|--------|------------|--------|
+| `create` | `name`, `rate_limits` (opt), `token_limits` (opt) | `user_id`, `key_id`, raw key (one-time) |
+| `list` | `status` filter, `page`, `page_size` | Paginated user list |
+| `revoke` | `user_id` (confirmation) | Status → revoked, Redis cache cleared |
+| `rotate_key` | `user_id` (confirmation) | New `key_id`, raw key (one-time), old key revoked |
+| `check_limits` | `user_id` | Current usage per tier (rate + token cost) |
+| `check_token_usage` | `user_id` | Current token usage per tier (input/output/total) |
+| `update_limits` | `user_id`, new rate limits | Updated config |
+| `update_token_limits` | `user_id`, new token limits | Updated config |
+
+### Audit Log Examples
+
+Operators can reference these structured log entries for troubleshooting and compliance:
+
+**User creation:**
+```
+2026-05-23T10:15:30Z  INFO  user_created  user_id=a1b2c3d4e5f6...  user_name=api-client-01  rate_limits={"daily":100,"weekly":500,"monthly":2000}  actor=admin
+```
+
+**Key rotation:**
+```
+2026-05-23T14:32:01Z  INFO  key_rotated  user_id=a1b2c3d4e5f6...  user_name=api-client-01  key_version=2  actor=admin
+```
+
+**Rate limit update:**
+```
+2026-05-23T14:32:01Z  INFO  limits_updated  user_id=a1b2c3d4e5f6...  user_name=api-client-01  daily=200  weekly=1000  monthly=5000  actor=admin
+```
+
+**Token limit update:**
+```
+2026-05-23T14:32:02Z  INFO  token_limits_updated  user_id=a1b2c3d4e5f6...  user_name=api-client-01  daily=5000000  weekly=25000000  monthly=100000000  actor=admin
+```
+
+**Invalid token (revoked key used):**
+```
+2026-05-23T14:35:17Z  WARN  invalid_token  user_id=a1b2c3d4e5f6...  key_id=key_old_revoked  tool_name=search  result=denied  timestamp=2026-05-23T14:35:17Z
+```
+
+**Rate limit exceeded:**
+```
+2026-05-23T15:01:42Z  WARN  rate_limit_exceeded  user_id=f6e5d4c3b2a1...  key_id=key_7f8g9h0i1j2k  tool_name=content  result=denied  timestamp=2026-05-23T15:01:42Z
+```
+
+**User disabled:**
+```
+2026-05-23T16:20:05Z  WARN  user_disabled  user_id=c3b2a1f6e5d4...  key_id=key_revoked_01  tool_name=webfetch  result=denied  timestamp=2026-05-23T16:20:05Z
+```
+
+**Note:** token cost data (input/output tokens) is NOT included in audit logs — audit logs contain event metadata only.
+
 ## Development
 
 ### Project Standards

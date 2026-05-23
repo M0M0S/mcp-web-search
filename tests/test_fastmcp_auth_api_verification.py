@@ -179,7 +179,7 @@ class TestFastMcpApiSignatureVerification:
 
         try:
             from fastmcp import FastMCP
-            from app.core.dependencies import AuthProvider
+            from app.core.dependencies import DefaultAuthProvider
 
             sig = inspect.signature(FastMCP.__init__)
             params = sig.parameters

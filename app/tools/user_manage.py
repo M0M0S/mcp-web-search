@@ -11,7 +11,6 @@ Raw API keys are delivered one-time only — never stored in DB or logs.
 from __future__ import annotations
 
 import datetime
-import uuid
 from typing import Any
 
 import structlog
@@ -114,6 +113,7 @@ async def create_user(
         name=name,
         rate_limits=rate_limits,
         token_limits=token_limits,
+        encrypted_key=encrypted_key,
     )
 
     user_id: str = user_record["user_id"]
@@ -245,9 +245,10 @@ async def rotate_key(user_id: str) -> dict[str, Any]:
     Raises:
         ValueError: If user not found.
     """
-    # Increment key_version in DB
+    # Increment key_version and update key_id in DB
     rotation_record: dict[str, Any] = _store_rotate_key(user_id)
     old_key_id: str = rotation_record["old_key_id"]
+    new_key_id: str = rotation_record["new_key_id"]
     new_key_version: int = rotation_record["new_key_version"]
 
     # Generate and encrypt new key
@@ -275,7 +276,7 @@ async def rotate_key(user_id: str) -> dict[str, Any]:
     # Return with raw_key (one-time delivery)
     return {
         "user_id": user_id,
-        "new_key_id": f"key_{uuid.uuid4().hex[:12]}",
+        "new_key_id": new_key_id,
         "raw_key": raw_key,
         "old_key_id": old_key_id,
         "key_version": new_key_version,
@@ -494,6 +495,7 @@ def register_user_manage_tools(mcp: Any) -> None:
         update_token_limits,
     ]
 
+    auth_check = require_scopes("admin")
+
     for tool in admin_tools:
-        decorated = require_scopes("admin")(tool)
-        mcp.add_tool(decorated)
+        mcp.add_tool(tool, auth=auth_check)

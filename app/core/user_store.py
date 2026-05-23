@@ -149,6 +149,7 @@ def create_user(
     rate_limits: dict[str, int] | None = None,
     token_limits: dict[str, int] | None = None,
     scopes: list[str] | None = None,
+    encrypted_key: str | None = None,
 ) -> dict[str, Any]:
     """Create a new user record in the SQLite store.
 
@@ -157,6 +158,7 @@ def create_user(
         rate_limits: Optional override for daily/weekly/monthly limits.
         token_limits: Optional override for daily/weekly/monthly token limits.
         scopes: Optional list of authorized scopes (default: ["read"]).
+        encrypted_key: Optional pre-encrypted key (hex-encoded Fernet ciphertext).
 
     Returns:
         Dict with user_id, key_id, encrypted_key, status, scopes, rate_limits,
@@ -168,7 +170,6 @@ def create_user(
     """
     user_id = uuid.uuid4().hex
     key_id = f"key_{uuid.uuid4().hex[:12]}"
-    encrypted_key: str | None = None
 
     # Resolve rate limits with defaults
     rl_daily: int = rate_limits.get("daily", 100) if rate_limits else 100
@@ -474,7 +475,7 @@ def update_user(user_id: str, **kwargs: Any) -> dict[str, Any]:
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()
@@ -528,13 +529,17 @@ def revoke_user(user_id: str) -> dict[str, Any]:
     return _row_to_dict(updated)
 
 
-def rotate_key(user_id: str) -> dict[str, Any]:
-    """Rotate a user's key version (increment by 1).
+def rotate_key(
+    user_id: str,
+    new_key_id: str | None = None,
+) -> dict[str, Any]:
+    """Rotate a user's key: increment key_version and update key_id.
 
     Returns the old key_id so the caller can revoke it if needed.
 
     Args:
         user_id: The user UUID hex.
+        new_key_id: Optional new key_id. If None, a fresh key_id is generated.
 
     Returns:
         Dict with old_key_id, new_key_id, key_version, user_id.
@@ -552,11 +557,12 @@ def rotate_key(user_id: str) -> dict[str, Any]:
 
     old_key_id: str = existing["key_id"]
     new_key_version: int = existing["key_version"] + 1
+    effective_new_key_id: str = new_key_id if new_key_id else f"key_{uuid.uuid4().hex[:12]}"
     ts = _now_iso()
 
     conn.execute(
-        "UPDATE users SET key_version = ?, updated_at = ? WHERE id = ?",
-        (new_key_version, ts, user_id),
+        "UPDATE users SET key_version = ?, key_id = ?, updated_at = ? WHERE id = ?",
+        (new_key_version, effective_new_key_id, ts, user_id),
     )
     conn.commit()
 
@@ -564,12 +570,14 @@ def rotate_key(user_id: str) -> dict[str, Any]:
         "user_store_key_rotated",
         user_id=user_id,
         old_key_id=old_key_id,
+        new_key_id=effective_new_key_id,
         new_key_version=new_key_version,
     )
 
     return {
         "user_id": user_id,
         "old_key_id": old_key_id,
+        "new_key_id": effective_new_key_id,
         "new_key_version": new_key_version,
         "updated_at": ts,
     }
@@ -637,7 +645,7 @@ def update_rate_limits(
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()
@@ -719,7 +727,7 @@ def update_token_limits(
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()

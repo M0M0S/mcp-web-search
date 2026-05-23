@@ -235,7 +235,7 @@ class Settings(BaseSettings):
         description="Knowledge Graph storage backend ('sqlite' or 'json')",
     )
     KG_DB_PATH: str = Field(
-        default="knowledge_graph.db",
+        default="data/knowledge_graph.db",
         description="Path to Knowledge Graph database file (SQLite) or JSON file",
     )
     KG_SEED_DATA_PATH: Optional[str] = Field(

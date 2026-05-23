@@ -35,14 +35,20 @@ class TestFlushCountersToDb:
         mock_pool = MagicMock()
         mock_get_pool.return_value = mock_pool
 
-        mock_pool.scan.side_effect = [
-            (0, ["rl:user1:daily", "rl:user2:weekly"]),
-            (0, []),
-        ]
-        mock_pool.get.side_effect = lambda key: {
-            "rl:user1:daily": "42",
-            "rl:user2:weekly": "100",
-        }.get(key)
+        async def mock_scan(cursor=0, match="rl:*", count=100):
+            if cursor == 0:
+                return (0, ["rl:user1:daily", "rl:user2:weekly"])
+            return (0, [])
+
+        mock_pool.scan = Mock(side_effect=mock_scan)
+
+        def mock_get(key):
+            return {
+                "rl:user1:daily": "42",
+                "rl:user2:weekly": "100",
+            }.get(key)
+
+        mock_pool.get = mock_get
 
         result = await flush_counters_to_db()
 
@@ -90,10 +96,12 @@ class TestFlushCountersToDb:
         mock_pool = MagicMock()
         mock_get_pool.return_value = mock_pool
 
-        mock_pool.scan.side_effect = [
-            (0, ["rl:user3:monthly"]),
-            (0, []),
-        ]
+        async def mock_scan(cursor=0, match="rl:*", count=100):
+            if cursor == 0:
+                return (0, ["rl:user3:monthly"])
+            return (0, [])
+
+        mock_pool.scan = mock_scan
         mock_pool.get.return_value = "500"
 
         result = await flush_counters_to_db()
@@ -192,7 +200,13 @@ class TestMockRedisAndSQLite:
 
         mock_pool = MagicMock()
         mock_get_pool.return_value = mock_pool
-        mock_pool.scan.side_effect = [(0, []), (0, [])]
+
+        async def mock_scan(cursor=0, match="rl:*", count=100):
+            if cursor == 0:
+                return (0, [])
+            return (0, [])
+
+        mock_pool.scan = mock_scan
 
         result = await flush_counters_to_db()
         assert result == {"synced": 0, "failed": 0}

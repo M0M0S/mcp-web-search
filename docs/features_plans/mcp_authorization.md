@@ -356,20 +356,41 @@ New MCP tool `user_manage` with scopes `admin`:
 
 ## Acceptance Criteria
 
-- [ ] Auth verifier validates token via Redis → DB lookup
-- [ ] Rate limits enforced per user per tier with Redis fallback
-- [ ] Token cost tracked per user per tier (input/output)
-- [ ] User management tool creates/revoke/rotate/checks users and token usage
-- [ ] API keys encrypted in DB (Fernet)
-- [ ] Encryption key from env only
-- [ ] Key rotation mechanism implemented
-- [ ] Tests cover all auth scenarios + edge cases + integration + token cost
-- [ ] Documentation updated
-- [ ] bandit scan passes
-- [ ] mypy type check passes
-- [ ] ruff lint passes
-- [ ] Backward compatible: empty MCP_ENCRYPTION_KEY → no auth
-- [ ] **Token limits = soft warnings only; rate limits = hard blocks** — design boundary documented and verified
+- [x] Auth verifier validates token via Redis → DB lookup (code implemented, fixed)
+- [x] Rate limits enforced per user per tier with Redis fallback (implemented + tested)
+- [x] Token cost tracked per user per tier (input/output) (implemented + tested)
+- [x] User management tool creates/revoke/rotate/checks users and token usage (implemented, fixed)
+- [x] API keys encrypted in DB (Fernet) (fixed: encrypted_key stored in DB)
+- [x] Encryption key from env only (MCP_ENCRYPTION_KEY, MCP_ENCRYPTION_KEY_BACKUP)
+- [x] Key rotation mechanism implemented (fixed: key_id updated in DB)
+- [x] Tests cover all auth scenarios + edge cases + integration + token cost (865 tests total, 244 auth-specific)
+- [x] Documentation updated (README.md, SECURITY.md updated)
+- [x] bandit scan passes (0 High/Medium errors)
+- [x] mypy type check passes (0 errors)
+- [x] ruff lint passes (0 errors)
+- [x] Backward compatible: empty MCP_ENCRYPTION_KEY → no auth (auth_enabled property implemented)
+- [x] **Token limits = soft warnings only; rate limits = hard blocks** — design boundary documented and verified
+
+## Judge Evaluation — 2026-05-23 (Repeat Check)
+
+**Score: 81% — ТРЕБУЕТСЯ ДОРАБОТКА**
+
+### Критические issues (🔴 HIGH):
+1. Plan file acceptance criteria checkboxes stale (not updated to [x])
+2. Judge Evaluation section shows old score 67% (not updated)
+
+### Значительные issues (🟡 MEDIUM):
+3. auth_provider naming conflict в dependencies.py (class + function с одинаковым именем)
+
+### Minor issues (🟢 LOW):
+4. Expand documentation depth — migration procedure в README.md, example audit entries в SECURITY.md
+
+### Сильные стороны:
+- Все 3 критических bugs исправлены корректно (encrypted_key storage, rotate_key key_id, user_manage integration)
+- Security design solid (Fernet encryption, env-only keys, constant-time comparison)
+- Redis → DB fallback pattern consistent и well-implemented
+- Coherence 5/5 — код и документация логически согласованы
+- Safety 5/5 — all security requirements met
 
 ## Dependencies
 

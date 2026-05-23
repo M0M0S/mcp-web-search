@@ -334,7 +334,7 @@ async def flush_counters_to_db() -> dict[str, int]:
 
     cursor: int = 0
     while True:
-        cursor, keys = pool.scan(  # type: ignore[assignment]
+        cursor, keys = await pool.scan(  # type: ignore[assignment]
             cursor=cursor, match="rl:*", count=100
         )
         if not keys:  # type: ignore[union-attr]
