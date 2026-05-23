@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-23
+
+### Added
+- **MCP Authorization System** — полный набор модулей авторизации:
+  - `encryption` — шифрование/дешифрование ключей (AES-GCM, Fernet)
+  - `user_store` — управление пользователями и API ключами (Redis)
+  - `rate_limiter` — rate limiting по пользователям (Redis sliding window)
+  - `token_cost_tracker` — трекинг token cost на запрос
+  - `token_verifier` — верификация токенов с fallback на backup key
+  - `user_manage` — MCP tools: `create_user`, `delete_user`, `list_users`, `rotate_key`
+- **Auth test suite** — 11 тестовых файлов, 246 тестов (backward compat, shutdown flush, backup key, admin scope, FastMCP API)
+- **Документация**: README.md (auth section), SECURITY.md (auth policy)
+
+### Fixed
+- `encrypted_key` storage — корректное сохранение зашифрованного ключа в Redis
+- `rotate_key` — корректное обновление `key_id` при ротации
+
+### Security
+- Bandit: 0 High, 0 Medium
+- mypy: 0 errors
+- ruff: 0 violations
+
+---
+
 ## [1.0.3] - 2026-05-22
 
 ### Changed
