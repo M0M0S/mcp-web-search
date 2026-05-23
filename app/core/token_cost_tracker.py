@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import sqlite3
+import time
 from typing import Final, cast
 
 import redis
@@ -135,6 +136,73 @@ async def _redis_get_int_async(pool: redis_async.Redis, key: str) -> int | None:
     return cast(int, int(raw))  # type: ignore[arg-type]
 
 
+def _get_counter_with_fallback(
+    user_id: str,
+    tier: str,
+    input_suffix: str,
+    output_suffix: str,
+) -> tuple[int, int]:
+    """Get counters from Redis with single DB fallback.
+
+    Returns (input, output) as ints — DB fallback guarantees non-zero ints.
+
+    Key-absence (new user / expired keys) does NOT set `_redis_available = False`.
+    Only connection errors trigger fallback state change. TTL-based recovery
+    periodically re-checks Redis health.
+
+    Args:
+        user_id: User identifier.
+        tier: Rate-limit tier.
+        input_suffix: Counter suffix for input (typically 'input').
+        output_suffix: Counter suffix for output (typically 'output').
+
+    Returns:
+        Tuple of (input_counter, output_counter) as ints.
+    """
+    global _redis_available, _redis_last_check
+
+    # TTL-based recovery: schedule async ping if previously marked unavailable
+    if not _redis_available:
+        if _redis_last_check > 0 and time.time() - _redis_last_check > REDIS_HEALTH_CHECK_INTERVAL:
+            # Schedule non-blocking recovery ping — current call returns DB fallback
+            _schedule_redis_recovery()
+            return (
+                _db_get_token_counter(user_id, tier, input_suffix),
+                _db_get_token_counter(user_id, tier, output_suffix),
+            )
+        else:
+            return (
+                _db_get_token_counter(user_id, tier, input_suffix),
+                _db_get_token_counter(user_id, tier, output_suffix),
+            )
+
+    try:
+        pool = _get_pool(_get_settings())
+        inp = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:{input_suffix}")
+        out = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:{output_suffix}")
+        if inp is None or out is None:
+            # Key absent (new user / expired TTL) — DB fallback ONLY,
+            # do NOT mark Redis as unavailable.
+            return (
+                _db_get_token_counter(user_id, tier, input_suffix),
+                _db_get_token_counter(user_id, tier, output_suffix),
+            )
+        return inp, out
+    except (redis.ConnectionError, redis.TimeoutError, OSError):
+        logger.warning(
+            "redis_counter_failed",
+            user_id=user_id,
+            tier=tier,
+            fallback="db",
+        )
+        _redis_available = False
+        _redis_last_check = time.time()
+        return (
+            _db_get_token_counter(user_id, tier, input_suffix),
+            _db_get_token_counter(user_id, tier, output_suffix),
+        )
+
+
 def _get_counter_from_redis(
     user_id: str,
     tier: str,
@@ -252,6 +320,41 @@ def _db_get_token_counter(
 
 
 # ---------------------------------------------------------------------------
+# Non-blocking Redis recovery helpers
+# ---------------------------------------------------------------------------
+
+
+async def _perform_redis_recovery() -> None:
+    """Non-blocking Redis recovery ping.
+
+    Updates ``_redis_available`` and ``_redis_last_check`` asynchronously.
+    """
+    global _redis_available, _redis_last_check
+    try:
+        settings = _get_settings()
+        pool = _get_pool(settings)
+        await asyncio.to_thread(pool.ping)  # type: ignore[no-untyped-call]
+        _redis_available = True
+        _redis_last_check = time.time()
+    except (redis.ConnectionError, redis.TimeoutError, OSError):
+        logger.warning("redis_recovery_failed", fallback="db")
+        _redis_last_check = time.time()
+
+
+def _schedule_redis_recovery() -> None:
+    """Schedule a non-blocking async Redis recovery ping.
+
+    Uses ``asyncio.create_task`` if an event loop is running.
+    Silently skips if no event loop is available.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_perform_redis_recovery())
+    except RuntimeError:
+        pass  # no running event loop — skip async recovery
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -301,9 +404,10 @@ def record_tokens(
         conn.row_factory = sqlite3.Row
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        # Read current values from DB
-        current_input = _db_get_token_counter(user_id, tier, "input")
-        current_output = _db_get_token_counter(user_id, tier, "output")
+        # Read current values via unified fallback helper
+        current_input, current_output = _get_counter_with_fallback(
+            user_id, tier, "input", "output"
+        )
 
         new_input = current_input + input_tokens
         new_output = current_output + output_tokens
@@ -347,25 +451,9 @@ def check_token_limits(
     """
     global _redis_available
 
-    # Read current counters
-    if _redis_available:
-        try:
-            pool = _get_pool(_get_settings())
-            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
-            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
-        except (redis.ConnectionError, redis.TimeoutError, OSError):
-            logger.warning(
-                "redis_check_failed",
-                user_id=user_id,
-                tier=tier,
-                fallback="db",
-            )
-            _redis_available = False
-            current_input = _db_get_token_counter(user_id, tier, "input")
-            current_output = _db_get_token_counter(user_id, tier, "output")
-    else:
-        current_input = _db_get_token_counter(user_id, tier, "input")
-        current_output = _db_get_token_counter(user_id, tier, "output")
+    current_input, current_output = _get_counter_with_fallback(
+        user_id, tier, "input", "output"
+    )
 
     total = current_input + current_output
 
@@ -414,17 +502,9 @@ def sync_to_db(
     """
     global _redis_available
 
-    if _redis_available:
-        try:
-            pool = _get_pool(_get_settings())
-            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
-            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
-        except (redis.ConnectionError, redis.TimeoutError, OSError):
-            current_input = _db_get_token_counter(user_id, tier, "input")
-            current_output = _db_get_token_counter(user_id, tier, "output")
-    else:
-        current_input = _db_get_token_counter(user_id, tier, "input")
-        current_output = _db_get_token_counter(user_id, tier, "output")
+    current_input, current_output = _get_counter_with_fallback(
+        user_id, tier, "input", "output"
+    )
 
     total = current_input + current_output
 
@@ -464,18 +544,9 @@ def get_token_usage(
     """
     global _redis_available
 
-    if _redis_available:
-        try:
-            pool = _get_pool(_get_settings())
-            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
-            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
-        except (redis.ConnectionError, redis.TimeoutError, OSError):
-            _redis_available = False
-            current_input = _db_get_token_counter(user_id, tier, "input")
-            current_output = _db_get_token_counter(user_id, tier, "output")
-    else:
-        current_input = _db_get_token_counter(user_id, tier, "input")
-        current_output = _db_get_token_counter(user_id, tier, "output")
+    current_input, current_output = _get_counter_with_fallback(
+        user_id, tier, "input", "output"
+    )
 
     return {
         "input_tokens": current_input,
@@ -526,8 +597,12 @@ async def flush_counters_to_db() -> dict[str, int]:
         for key in keys:
             try:
                 raw = key.decode() if isinstance(key, bytes) else key
-                user_id, rest = raw.split(":", 1)
-                tier, suffix = rest.split(":", 1)
+                # Strip REDIS_KEY_PREFIX ("tc:") — key format: tc:user_id:tier:suffix
+                _, rest = raw.split(":", 1)
+                if rest.count(":") < 2:
+                    continue  # malformed key (expected user_id:tier:suffix)
+                user_id, tier_rest = rest.split(":", 1)
+                tier, suffix = tier_rest.split(":", 1)
 
                 if suffix not in ("input", "output"):
                     continue

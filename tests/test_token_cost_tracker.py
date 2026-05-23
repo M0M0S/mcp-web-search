@@ -6,17 +6,18 @@ tier-specific limits, bounds validation, and DB sync.
 
 from __future__ import annotations
 
-import os
 import sqlite3
+import time
 from typing import Generator
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch
-
+import redis
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _ensure_schema() -> Generator[None, None, None]:
@@ -59,8 +60,6 @@ def mock_redis_pool() -> Generator[None, None, None]:
     Configure the mock via ``pool.get.return_value``, ``pool.incrby.return_value``
     etc. before running test logic.
     """
-    from unittest.mock import MagicMock
-
     with patch("redis.from_url") as mock_from_url:
         from app.core import token_cost_tracker
 
@@ -106,10 +105,13 @@ def force_db_fallback() -> Generator[None, None, None]:
 # 1. Token cost recording — input/output per tier
 # ---------------------------------------------------------------------------
 
+
 class TestTokenCostRecording:
     """record_tokens — input and output counters per tier — DB fallback path."""
 
-    def test_record_input_tokens(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_record_input_tokens(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """record_tokens increments input counter via DB fallback."""
         from app.core.token_cost_tracker import record_tokens
 
@@ -123,7 +125,9 @@ class TestTokenCostRecording:
         assert row is not None
         assert row[0] == 100
 
-    def test_record_output_tokens(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_record_output_tokens(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """record_tokens increments output counter via DB fallback."""
         from app.core.token_cost_tracker import record_tokens
 
@@ -137,7 +141,9 @@ class TestTokenCostRecording:
         assert row is not None
         assert row[0] == 50
 
-    def test_record_multiple_tiers(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_record_multiple_tiers(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """record_tokens works for weekly and monthly tiers via DB fallback."""
         from app.core.token_cost_tracker import record_tokens
 
@@ -156,7 +162,9 @@ class TestTokenCostRecording:
         ).fetchone()
         assert monthly_row[0] == 300
 
-    def test_record_accumulates(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_record_accumulates(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """Multiple record_tokens calls accumulate via DB fallback."""
         from app.core.token_cost_tracker import record_tokens
 
@@ -175,11 +183,15 @@ class TestTokenCostRecording:
 # 2. Redis counters (mocked — DB fallback path)
 # ---------------------------------------------------------------------------
 
+
 class TestRedisCountersMocked:
     """Token counters via mocked Redis — Redis path."""
 
-    def test_get_token_usage_from_redis(self, mock_redis_pool: Generator[None, None, None]) -> None:
+    def test_get_token_usage_from_redis(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
         """get_token_usage returns values from mocked Redis."""
+
         def _get_side_effect(key: str) -> int | None:
             if "input" in key:
                 return 500
@@ -197,8 +209,11 @@ class TestRedisCountersMocked:
         assert usage["output_tokens"] == 250
         assert usage["total_tokens"] == 750
 
-    def test_check_token_limits_from_redis(self, mock_redis_pool: Generator[None, None, None]) -> None:
+    def test_check_token_limits_from_redis(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
         """check_token_limits reads from mocked Redis."""
+
         def _get_side_effect(key: str) -> int | None:
             if "input" in key:
                 return 100
@@ -221,43 +236,76 @@ class TestRedisCountersMocked:
 # 3. Tier-specific token limits — limits.get(tier)
 # ---------------------------------------------------------------------------
 
+
 class TestTierSpecificLimits:
     """check_token_limits uses tier-specific limits from user store — DB fallback path."""
 
-    def test_daily_limit_applied(self, force_db_fallback: None, user_with_token_limits: dict, shared_db: sqlite3.Connection) -> None:
+    def test_daily_limit_applied(
+        self,
+        force_db_fallback: None,
+        user_with_token_limits: dict,
+        shared_db: sqlite3.Connection,
+    ) -> None:
         """daily limit from user config is used for daily tier via DB fallback."""
         from app.core.token_cost_tracker import check_token_limits, record_tokens
 
-        record_tokens(user_with_token_limits["user_id"], "daily", input_tokens=500000, output_tokens=500000)
+        record_tokens(
+            user_with_token_limits["user_id"],
+            "daily",
+            input_tokens=500000,
+            output_tokens=500000,
+        )
 
         result = check_token_limits(user_with_token_limits["user_id"], "daily")
 
         assert result["limit_input"] == 1000000
         assert result["exceeded"] is True
 
-    def test_weekly_limit_applied(self, force_db_fallback: None, user_with_token_limits: dict, shared_db: sqlite3.Connection) -> None:
+    def test_weekly_limit_applied(
+        self,
+        force_db_fallback: None,
+        user_with_token_limits: dict,
+        shared_db: sqlite3.Connection,
+    ) -> None:
         """weekly limit from user config is used for weekly tier via DB fallback."""
         from app.core.token_cost_tracker import check_token_limits, record_tokens
 
-        record_tokens(user_with_token_limits["user_id"], "weekly", input_tokens=1000000, output_tokens=1000000)
+        record_tokens(
+            user_with_token_limits["user_id"],
+            "weekly",
+            input_tokens=1000000,
+            output_tokens=1000000,
+        )
 
         result = check_token_limits(user_with_token_limits["user_id"], "weekly")
 
         assert result["limit_input"] == 5000000
         assert result["exceeded"] is False
 
-    def test_monthly_limit_applied(self, force_db_fallback: None, user_with_token_limits: dict, shared_db: sqlite3.Connection) -> None:
+    def test_monthly_limit_applied(
+        self,
+        force_db_fallback: None,
+        user_with_token_limits: dict,
+        shared_db: sqlite3.Connection,
+    ) -> None:
         """monthly limit from user config is used for monthly tier via DB fallback."""
         from app.core.token_cost_tracker import check_token_limits, record_tokens
 
-        record_tokens(user_with_token_limits["user_id"], "monthly", input_tokens=5000000, output_tokens=5000000)
+        record_tokens(
+            user_with_token_limits["user_id"],
+            "monthly",
+            input_tokens=5000000,
+            output_tokens=5000000,
+        )
 
         result = check_token_limits(user_with_token_limits["user_id"], "monthly")
 
         assert result["limit_input"] == 20000000
         assert result["exceeded"] is False
 
-    def test_no_limit_returns_none(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_no_limit_returns_none(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """User with no token limits → limit_input = None via DB fallback."""
         from app.core.token_cost_tracker import check_token_limits
         from app.core.user_store import create_user
@@ -274,6 +322,7 @@ class TestTierSpecificLimits:
 # 4. Token limit bounds validation [0-10M/50M/200M]
 # ---------------------------------------------------------------------------
 
+
 class TestTokenLimitBounds:
     """validate_token_limit_bounds correctness."""
 
@@ -281,11 +330,14 @@ class TestTokenLimitBounds:
         """All values within bounds → True."""
         from app.core.token_cost_tracker import validate_token_limit_bounds
 
-        assert validate_token_limit_bounds(
-            daily=1000000,
-            weekly=5000000,
-            monthly=20000000,
-        ) is True
+        assert (
+            validate_token_limit_bounds(
+                daily=1000000,
+                weekly=5000000,
+                monthly=20000000,
+            )
+            is True
+        )
 
     def test_zero_allowed(self) -> None:
         """Zero (unlimited) is within bounds."""
@@ -297,25 +349,36 @@ class TestTokenLimitBounds:
         """None values are ignored (not validated)."""
         from app.core.token_cost_tracker import validate_token_limit_bounds
 
-        assert validate_token_limit_bounds(daily=None, weekly=None, monthly=None) is True
+        assert (
+            validate_token_limit_bounds(daily=None, weekly=None, monthly=None) is True
+        )
 
     def test_daily_above_max(self) -> None:
         """Daily above 10_000_000 → False."""
         from app.core.token_cost_tracker import validate_token_limit_bounds
 
-        assert validate_token_limit_bounds(daily=10000001, weekly=None, monthly=None) is False
+        assert (
+            validate_token_limit_bounds(daily=10000001, weekly=None, monthly=None)
+            is False
+        )
 
     def test_weekly_above_max(self) -> None:
         """Weekly above 50_000_000 → False."""
         from app.core.token_cost_tracker import validate_token_limit_bounds
 
-        assert validate_token_limit_bounds(daily=None, weekly=50000001, monthly=None) is False
+        assert (
+            validate_token_limit_bounds(daily=None, weekly=50000001, monthly=None)
+            is False
+        )
 
     def test_monthly_above_max(self) -> None:
         """Monthly above 200_000_000 → False."""
         from app.core.token_cost_tracker import validate_token_limit_bounds
 
-        assert validate_token_limit_bounds(daily=None, weekly=None, monthly=200000001) is False
+        assert (
+            validate_token_limit_bounds(daily=None, weekly=None, monthly=200000001)
+            is False
+        )
 
     def test_negative_raises_false(self) -> None:
         """Negative values → False."""
@@ -328,12 +391,15 @@ class TestTokenLimitBounds:
 # 5. DB sync — token_cost_snapshots upsert
 # ---------------------------------------------------------------------------
 
+
 class TestTokenSyncToDB:
     """sync_to_db upserts token_cost_snapshots — DB fallback path."""
 
-    def test_sync_creates_snapshot(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_sync_creates_snapshot(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """sync_to_db creates a token_cost_snapshot row via DB fallback."""
-        from app.core.token_cost_tracker import sync_to_db, record_tokens
+        from app.core.token_cost_tracker import record_tokens, sync_to_db
 
         record_tokens("sync_user", "daily", input_tokens=100, output_tokens=50)
         sync_to_db("sync_user", "daily")
@@ -349,9 +415,11 @@ class TestTokenSyncToDB:
         assert row[1] == 50
         assert row[2] == 150
 
-    def test_sync_upserts_existing(self, force_db_fallback: None, shared_db: sqlite3.Connection) -> None:
+    def test_sync_upserts_existing(
+        self, force_db_fallback: None, shared_db: sqlite3.Connection
+    ) -> None:
         """sync_to_db updates existing snapshot via DB fallback."""
-        from app.core.token_cost_tracker import sync_to_db, record_tokens
+        from app.core.token_cost_tracker import record_tokens, sync_to_db
 
         record_tokens("sync_user_2", "weekly", input_tokens=200, output_tokens=100)
         sync_to_db("sync_user_2", "weekly")
@@ -375,6 +443,7 @@ class TestTokenSyncToDB:
 # ---------------------------------------------------------------------------
 # 6. get_tier_ttl (delegated to rate_limiter)
 # ---------------------------------------------------------------------------
+
 
 class TestTokenTierTTL:
     """get_tier_ttl delegates to rate_limiter."""
@@ -402,3 +471,327 @@ class TestTokenTierTTL:
         from app.core.token_cost_tracker import get_tier_ttl
 
         assert get_tier_ttl("custom") == 86400
+
+
+# ---------------------------------------------------------------------------
+# 7. Key-absence bug fix — new users should NOT permanently disable Redis
+# ---------------------------------------------------------------------------
+
+
+class TestKeyAbsenceBugFix:
+    """Verify that key-absence does NOT set `_redis_available = False`."""
+
+    def test_new_user_does_not_disable_redis(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """New user (no Redis keys) → counters from DB fallback, _redis_available stays True."""
+
+        def _get_side_effect(key: str) -> int | None:
+            return None  # all keys absent (new user)
+
+        mock_redis_pool.get.side_effect = _get_side_effect
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import get_token_usage
+
+        # Before: _redis_available should be True
+        assert token_cost_tracker._redis_available is True
+
+        usage = get_token_usage("new_user", "daily")
+
+        # After: _redis_available MUST stay True (key absent ≠ Redis down)
+        assert token_cost_tracker._redis_available is True
+        # DB fallback returns 0 for new user
+        assert usage["input_tokens"] == 0
+        assert usage["output_tokens"] == 0
+        assert usage["total_tokens"] == 0
+
+    def test_key_absence_does_not_affect_subsequent_redis_reads(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """After key-absence fallback, subsequent reads still use Redis."""
+
+        def _get_side_effect(key: str) -> int | None:
+            if "new_user" in key:
+                return None  # first call: key absent
+            if "input" in key:
+                return 500
+            if "output" in key:
+                return 250
+            return None
+
+        mock_redis_pool.get.side_effect = _get_side_effect
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import get_token_usage
+
+        # First call — new user, keys absent
+        usage1 = get_token_usage("new_user", "daily")
+        assert token_cost_tracker._redis_available is True
+
+        # Second call — existing user, keys present
+        usage2 = get_token_usage("existing_user", "daily")
+        assert token_cost_tracker._redis_available is True
+        assert usage2["input_tokens"] == 500
+        assert usage2["output_tokens"] == 250
+
+
+# ---------------------------------------------------------------------------
+# 8. Redis health-check recovery mechanism
+# ---------------------------------------------------------------------------
+
+
+class TestRedisRecovery:
+    """TTL-based Redis health-check recovery — non-blocking async ping."""
+
+    def test_recovery_ping_scheduled_non_blocking(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """Recovery ping scheduled as non-blocking async task.
+
+        ``_redis_available`` stays False immediately after call — ping runs in background.
+        """
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import get_token_usage
+
+        # Simulate Redis failure + interval elapsed
+        token_cost_tracker._redis_available = False
+        token_cost_tracker._redis_last_check = time.time() - 60
+
+        usage = get_token_usage("recover_user", "daily")
+
+        # Ping scheduled but not yet completed — _redis_available still False
+        assert token_cost_tracker._redis_available is False
+        # DB fallback returns 0 for non-existent user
+        assert usage["input_tokens"] == 0
+        assert usage["output_tokens"] == 0
+
+    async def test_async_recovery_completes(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """Direct async recovery ping → ``_redis_available`` restored."""
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import _perform_redis_recovery
+
+        token_cost_tracker._redis_available = False
+        token_cost_tracker._redis_last_check = time.time() - 60
+
+        await _perform_redis_recovery()
+
+        assert token_cost_tracker._redis_available is True
+        assert token_cost_tracker._redis_last_check > 0
+
+    async def test_async_recovery_failure(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """Async recovery ping fails → ``_redis_available`` stays False, ``_redis_last_check`` updated."""
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import _perform_redis_recovery
+
+        token_cost_tracker._redis_available = False
+        token_cost_tracker._redis_last_check = time.time() - 60
+
+        mock_redis_pool.ping.side_effect = redis.ConnectionError("connection lost")  # type: ignore[assignment]
+
+        await _perform_redis_recovery()
+
+        assert token_cost_tracker._redis_available is False
+        assert token_cost_tracker._redis_last_check > 0
+
+
+# ---------------------------------------------------------------------------
+# 9. flush_counters_to_db — async scan + DB upsert
+# ---------------------------------------------------------------------------
+
+
+class TestFlushCountersToDB:
+    """flush_counters_to_db — async scan + DB upsert."""
+
+    async def test_flush_syncs_redis_counters_to_db(
+        self, shared_db: sqlite3.Connection
+    ) -> None:
+        """flush_counters_to_db scans Redis keys and upserts to DB."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+        from unittest.mock import AsyncMock, MagicMock
+
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_async_pool = None
+
+        mock_pool: MagicMock = MagicMock()
+
+        async def _scan_side_effect(
+            cursor: int, match: str, count: int
+        ) -> tuple[int, list[str]]:
+            if cursor == 0:
+                return (
+                    100,
+                    [
+                        "tc:user_flush:daily:input",
+                        "tc:user_flush:daily:output",
+                        "tc:user_flush2:weekly:input",
+                    ],
+                )
+            return (0, [])
+
+        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
+        mock_pool.delete.return_value = 1
+
+        # Mock get to return integer values for scanned keys
+        async def _get_side_effect(key: str) -> int | None:
+            if "user_flush" in key and "input" in key:
+                return 1000
+            if "user_flush" in key and "output" in key:
+                return 500
+            if "user_flush2" in key:
+                return 200
+            return None
+
+        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
+
+        with patch.object(
+            token_cost_tracker,
+            "_get_async_pool",
+            return_value=mock_pool,  # type: ignore[arg-type]
+        ) as mock_get_pool:
+            result = await flush_counters_to_db()
+
+        # Verify _get_async_pool was called and returned mock
+        mock_get_pool.assert_called_once()
+
+        assert result["synced"] == 3
+        assert result["failed"] == 0
+
+    async def test_flush_noop_when_redis_unavailable(
+        self, force_db_fallback: None
+    ) -> None:
+        """flush_counters_to_db returns ``{synced: 0, failed: 0}`` when Redis unavailable."""
+        from app.core.token_cost_tracker import flush_counters_to_db
+
+        result = await flush_counters_to_db()
+
+        assert result == {"synced": 0, "failed": 0}
+
+    async def test_flush_skips_malformed_keys(
+        self, shared_db: sqlite3.Connection
+    ) -> None:
+        """flush_counters_to_db skips keys that don't match tc:user:tier:suffix format."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+        from unittest.mock import AsyncMock, MagicMock
+
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_async_pool = None
+
+        mock_pool: MagicMock = MagicMock()
+
+        async def _scan_side_effect(
+            cursor: int, match: str, count: int
+        ) -> tuple[int, list[str]]:
+            if cursor == 0:
+                return (
+                    100,
+                    [
+                        "tc:bad_key",
+                        "tc:user:daily:input",
+                    ],
+                )
+            return (0, [])
+
+        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
+        mock_pool.delete.return_value = 1
+
+        async def _get_side_effect(key: str) -> int | None:
+            if "user" in key and "input" in key:
+                return 42
+            return None
+
+        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
+
+        with patch.object(
+            token_cost_tracker,
+            "_get_async_pool",
+            return_value=mock_pool,  # type: ignore[arg-type]
+        ) as mock_get_pool:
+            result = await flush_counters_to_db()
+
+        mock_get_pool.assert_called_once()
+
+        assert result["synced"] == 1
+        assert result["failed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# 10. record_tokens — Redis increment path
+# ---------------------------------------------------------------------------
+
+
+class TestRecordTokensRedisPath:
+    """record_tokens — Redis incrby + expire path."""
+
+    def test_record_tokens_increases_redis_counters(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """record_tokens calls incrby + expire on Redis for both counters."""
+        from app.core.token_cost_tracker import record_tokens
+
+        record_tokens("redis_rec_user", "daily", input_tokens=100, output_tokens=50)
+
+        incrby_calls = mock_redis_pool.incrby.call_args_list
+        assert len(incrby_calls) == 2
+        assert incrby_calls[0][0] == ("tc:redis_rec_user:daily:input", 100)
+        assert incrby_calls[1][0] == ("tc:redis_rec_user:daily:output", 50)
+
+        expire_calls = mock_redis_pool.expire.call_args_list
+        assert len(expire_calls) == 2
+
+    def test_record_tokens_redis_success_path(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """record_tokens returns without exception on Redis success — counters updated."""
+
+        def _get_side_effect(key: str) -> int | None:
+            if "success_user" in key and "input" in key:
+                return 200
+            if "success_user" in key and "output" in key:
+                return 100
+            return None
+
+        mock_redis_pool.get.side_effect = _get_side_effect
+
+        from app.core.token_cost_tracker import record_tokens
+
+        result = record_tokens("success_user", "daily", input_tokens=200, output_tokens=100)
+
+        assert result is None  # function returns None on success
+
+        incrby_calls = mock_redis_pool.incrby.call_args_list
+        assert len(incrby_calls) == 2
+        assert incrby_calls[0][0] == ("tc:success_user:daily:input", 200)
+        assert incrby_calls[1][0] == ("tc:success_user:daily:output", 100)
+
+        expire_calls = mock_redis_pool.expire.call_args_list
+        assert len(expire_calls) == 2
+        assert expire_calls[0][0][1] == 86400  # daily TTL
+        assert expire_calls[1][0][1] == 86400  # daily TTL
+
+        # Verify _redis_available stays True
+        from app.core import token_cost_tracker
+
+        assert token_cost_tracker._redis_available is True
+
+    def test_record_tokens_redis_failure_sets_unavailable(
+        self, mock_redis_pool: Generator[None, None, None]
+    ) -> None:
+        """record_tokens Redis failure → ``_redis_available`` = False."""
+        mock_redis_pool.incrby.side_effect = redis.ConnectionError("connection lost")  # type: ignore[assignment]
+
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import record_tokens
+
+        record_tokens("fail_user", "daily", input_tokens=100, output_tokens=50)
+
+        assert token_cost_tracker._redis_available is False
