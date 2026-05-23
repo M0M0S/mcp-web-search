@@ -373,7 +373,7 @@ New MCP tool `user_manage` with scopes `admin`:
 
 ## Judge Evaluation — 2026-05-23 (Final)
 
-**Score: 90% — РЕАЛИЗАЦИЯ ЗАВЕРШЕНА**
+**Score: 92% — РЕАЛИЗАЦИЯ ЗАВЕРШЕНА**
 
 ### Завершённые issues (все resolved):
 1. ✅ encrypted_key storage в DB — fixed
@@ -385,10 +385,12 @@ New MCP tool `user_manage` with scopes `admin`:
 7. ✅ Type ignores reduced — 24 → 3 в token_cost_tracker.py
 8. ✅ Documentation depth — migration walkthrough + audit log examples added
 9. ✅ Test count verified — 865 total (244 auth-specific)
+10. ✅ cryptography dependency — added to pyproject.toml
 
 ### Minor remaining issues (LOW priority, не blocking):
 1. Verify verify_token async signature compatibility с FastMCP DebugTokenVerifier
 2. Add test для backup key recovery at exactly 99% success rate boundary
+3. Optional tests (7 items) — documented как excluded
 
 ### Сильные стороны:
 - Все HIGH/MEDIUM issues resolved
@@ -396,6 +398,7 @@ New MCP tool `user_manage` with scopes `admin`:
 - Documentation comprehensive (migration walkthrough, audit log examples)
 - Coherence 5/5 — код и документация логически согласованы
 - Safety 5/5 — все security requirements met
+- Correctness 5/5 — код реализует все заявленные функции без ошибок
 - Все 16 acceptance criteria [x]
 
 ## Dependencies

@@ -27,6 +27,7 @@ dependencies = [
     "httpx>=0.28",
     "tavily>=0.4",
     "prometheus-client>=0.20",
+    "cryptography>=3.4",
 ]
 
 [dependency-groups]
