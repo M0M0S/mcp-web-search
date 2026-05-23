@@ -43,6 +43,20 @@ from app.core.user_store import get_user_by_id, get_user_by_key_id
 logger: structlog.BoundLogger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -363,8 +377,7 @@ def get_admin_key_ids() -> list[str]:
     Returns:
         List of admin key_id strings.
     """
-    settings = Settings()
-    admin_key_ids: list[str] = settings.ADMIN_KEY_IDS
+    admin_key_ids: list[str] = _get_settings().ADMIN_KEY_IDS
 
     return admin_key_ids
 

@@ -9,11 +9,12 @@ never hard-blocks execution.
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 import datetime
+import sqlite3
 from typing import Final, cast
 
 import redis
+import redis.asyncio as redis_async
 import structlog
 
 from app.core.config import Settings
@@ -21,6 +22,20 @@ from app.core.rate_limiter import get_tier_ttl as _rl_get_tier_ttl
 from app.core.user_store import get_user_by_id
 
 logger = structlog.get_logger("token_cost_tracker")
+
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -44,6 +59,7 @@ _TOKEN_LIMIT_MONTHLY_MAX: Final[int] = 200_000_000
 # ---------------------------------------------------------------------------
 
 _redis_pool: redis.Redis | None = None
+_redis_async_pool: redis_async.Redis | None = None
 _redis_available: bool = True
 _redis_last_check: float = 0.0
 
@@ -55,7 +71,7 @@ _COLUMN_WHITELIST: Final[dict[str, str]] = {
 
 
 def _get_pool(settings: Settings) -> redis.Redis:
-    """Return (or create) the Redis connection pool."""
+    """Return (or create) the sync Redis connection pool."""
     global _redis_pool
     if _redis_pool is None:
         _redis_pool = redis.from_url(
@@ -66,6 +82,20 @@ def _get_pool(settings: Settings) -> redis.Redis:
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
         )
     return _redis_pool
+
+
+def _get_async_pool(settings: Settings) -> redis_async.Redis:
+    """Return (or create) the async Redis connection pool."""
+    global _redis_async_pool
+    if _redis_async_pool is None:
+        _redis_async_pool = redis_async.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_timeout=REDIS_TIMEOUT,
+            socket_connect_timeout=REDIS_TIMEOUT,
+            health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
+        )
+    return _redis_async_pool
 
 
 # ---------------------------------------------------------------------------
@@ -91,18 +121,18 @@ def _redis_get_int(pool: redis.Redis, key: str) -> int | None:
     Returns:
         Integer value or None if key absent.
     """
-    raw = pool.get(key)
+    raw = pool.get(key)  # type: ignore[assignment]
     if raw is None:
         return None
-    return cast(int, int(raw))
+    return cast(int, int(raw))  # type: ignore[arg-type]
 
 
-async def _redis_get_int_async(pool: redis.Redis, key: str) -> int | None:
+async def _redis_get_int_async(pool: redis_async.Redis, key: str) -> int | None:
     """Async variant of `_redis_get_int` for use with async Redis client."""
-    raw = await pool.get(key)
+    raw = await pool.get(key)  # type: ignore[assignment]
     if raw is None:
         return None
-    return cast(int, int(raw))
+    return cast(int, int(raw))  # type: ignore[arg-type]
 
 
 def _get_counter_from_redis(
@@ -124,7 +154,7 @@ def _get_counter_from_redis(
     """
     if not _redis_available:
         return None
-    pool = _get_pool(Settings())
+    pool = _get_pool(_get_settings())
     key = f"{_redis_key(user_id, tier)}:{suffix}"
     value = _redis_get_int(pool, key)
     return value
@@ -151,9 +181,9 @@ def _increment_counter_in_redis(
     """
     if not _redis_available:
         return None
-    pool = _get_pool(Settings())
+    pool = _get_pool(_get_settings())
     key = f"{_redis_key(user_id, tier)}:{suffix}"
-    new_value = pool.incrby(key, amount)  # type: ignore[no-untyped-call]
+    pool.incrby(key, amount)  # type: ignore[no-untyped-call]
     ttl = _rl_get_tier_ttl(tier)
     pool.expire(key, ttl)  # type: ignore[no-untyped-call]
     return _redis_get_int(pool, key)
@@ -213,10 +243,10 @@ def _db_get_token_counter(
             )
             return 0
         row = conn.execute(
-            f"SELECT {col} FROM token_cost_snapshots WHERE user_id = ? AND tier = ?",  #nosec B608 — col validated against _COLUMN_WHITELIST
+            f"SELECT {col} FROM token_cost_snapshots WHERE user_id = ? AND tier = ?",  # nosec B608 — col validated against _COLUMN_WHITELIST
             (user_id, tier),
         ).fetchone()
-        return row[col] if row else 0
+        return (row[col] or 0) if row else 0
     finally:
         conn.close()
 
@@ -272,14 +302,8 @@ def record_tokens(
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         # Read current values from DB
-        row = conn.execute(
-            "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
-            "WHERE user_id = ? AND tier = ?",
-            (user_id, tier),
-        ).fetchone()
-
-        current_input = row["input_tokens"] if row else 0
-        current_output = row["output_tokens"] if row else 0
+        current_input = _db_get_token_counter(user_id, tier, "input")
+        current_output = _db_get_token_counter(user_id, tier, "output")
 
         new_input = current_input + input_tokens
         new_output = current_output + output_tokens
@@ -326,9 +350,9 @@ def check_token_limits(
     # Read current counters
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
-            current_input = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:input")
-            current_output = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:output")
+            pool = _get_pool(_get_settings())
+            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
+            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
         except (redis.ConnectionError, redis.TimeoutError, OSError):
             logger.warning(
                 "redis_check_failed",
@@ -348,7 +372,9 @@ def check_token_limits(
     # Get configured limits from user store — tier-specific
     limits = _get_user_token_limits(user_id)
     limit_input = limits.get(tier)  # read limit for the specific tier
-    limit_output = limit_input  # single limit applies to both input and output for the tier
+    limit_output = (
+        limit_input  # single limit applies to both input and output for the tier
+    )
 
     # Determine exceeded status and warning
     exceeded = False
@@ -390,9 +416,9 @@ def sync_to_db(
 
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
-            current_input = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:input")
-            current_output = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:output")
+            pool = _get_pool(_get_settings())
+            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
+            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
         except (redis.ConnectionError, redis.TimeoutError, OSError):
             current_input = _db_get_token_counter(user_id, tier, "input")
             current_output = _db_get_token_counter(user_id, tier, "output")
@@ -440,9 +466,9 @@ def get_token_usage(
 
     if _redis_available:
         try:
-            pool = _get_pool(Settings())
-            current_input = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:input")
-            current_output = _redis_get_int(pool, f"{_redis_key(user_id, tier)}:output")
+            pool = _get_pool(_get_settings())
+            current_input = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:input") or 0)
+            current_output = (_redis_get_int(pool, f"{_redis_key(user_id, tier)}:output") or 0)
         except (redis.ConnectionError, redis.TimeoutError, OSError):
             _redis_available = False
             current_input = _db_get_token_counter(user_id, tier, "input")
@@ -479,8 +505,8 @@ async def flush_counters_to_db() -> dict[str, int]:
         return {"synced": 0, "failed": 0}
 
     try:
-        pool = _get_pool(Settings())
-    except (redis.ConnectionError, redis.TimeoutError, OSError):
+        pool = _get_async_pool(_get_settings())
+    except (redis_async.ConnectionError, redis_async.TimeoutError, OSError):
         _redis_available = False
         return {"synced": 0, "failed": 0}
 
@@ -489,7 +515,7 @@ async def flush_counters_to_db() -> dict[str, int]:
 
     cursor: int = 0
     while True:
-        cursor, keys = pool.scan(  # type: ignore[no-untyped-call]
+        cursor, keys = await pool.scan(
             cursor=cursor, match="tc:*", count=100
         )
         if not keys:
@@ -512,7 +538,9 @@ async def flush_counters_to_db() -> dict[str, int]:
                 # Read the counterpart counter
                 counterpart_key = f"{REDIS_KEY_PREFIX}{user_id}:{tier}:{'output' if suffix == 'input' else 'input'}"
                 counterpart_count = await _redis_get_int_async(pool, counterpart_key)
-                counterpart_count = counterpart_count if counterpart_count is not None else 0
+                counterpart_count = (
+                    counterpart_count if counterpart_count is not None else 0
+                )
 
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 await asyncio.to_thread(

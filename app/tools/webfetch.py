@@ -2,6 +2,7 @@
 
 from typing import Literal
 
+from app.core.config import Settings
 from app.core.logging import get_logger
 from app.models.webfetch import WebFetchState
 from app.services.content_service import ContentService
@@ -10,6 +11,20 @@ from app.services.search_service import SearchService
 from app.services.webfetch_service import WebFetchService
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
 
 
 async def webfetch(
@@ -41,10 +56,9 @@ async def webfetch(
     Returns:
         Dictionary with agent results (json format) or markdown string (markdown format)
     """
-    from app.core.config import Settings
     from app.core.dependencies import get_redis, init_redis
 
-    settings = Settings()
+    settings = _get_settings()
     redis_client = get_redis(settings.REDIS_URL)
     await init_redis(settings)
 

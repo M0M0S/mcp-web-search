@@ -19,6 +19,20 @@ from app.core.config import Settings
 logger: structlog.BoundLogger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+# ---------------------------------------------------------------------------
 # Schema constants
 # ---------------------------------------------------------------------------
 
@@ -46,8 +60,12 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """
 
-_CREATE_IDX_USERS_KEY_ID: Final[str] = "CREATE INDEX IF NOT EXISTS idx_users_key_id ON users(key_id)"
-_CREATE_IDX_USERS_STATUS: Final[str] = "CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)"
+_CREATE_IDX_USERS_KEY_ID: Final[str] = (
+    "CREATE INDEX IF NOT EXISTS idx_users_key_id ON users(key_id)"
+)
+_CREATE_IDX_USERS_STATUS: Final[str] = (
+    "CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)"
+)
 
 _CREATE_SNAPSHOTS: Final[str] = """
 CREATE TABLE IF NOT EXISTS rate_limit_snapshots (
@@ -59,7 +77,9 @@ CREATE TABLE IF NOT EXISTS rate_limit_snapshots (
 )
 """
 
-_CREATE_IDX_SNAPSHOTS_USER: Final[str] = "CREATE INDEX IF NOT EXISTS idx_snapshots_user ON rate_limit_snapshots(user_id)"
+_CREATE_IDX_SNAPSHOTS_USER: Final[str] = (
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_user ON rate_limit_snapshots(user_id)"
+)
 
 _CREATE_TOKEN_SNAPSHOTS: Final[str] = """
 CREATE TABLE IF NOT EXISTS token_cost_snapshots (
@@ -73,7 +93,9 @@ CREATE TABLE IF NOT EXISTS token_cost_snapshots (
 )
 """
 
-_CREATE_IDX_TOKEN_SNAPSHOTS_USER: Final[str] = "CREATE INDEX IF NOT EXISTS idx_token_snapshots_user ON token_cost_snapshots(user_id)"
+_CREATE_IDX_TOKEN_SNAPSHOTS_USER: Final[str] = (
+    "CREATE INDEX IF NOT EXISTS idx_token_snapshots_user ON token_cost_snapshots(user_id)"
+)
 
 # ---------------------------------------------------------------------------
 # Bounds validation constants
@@ -131,7 +153,7 @@ def init_db() -> sqlite3.Connection:
     Returns:
         A sqlite3.Connection configured with dict row factory.
     """
-    settings = Settings()
+    settings = _get_settings()
     db_path: str = settings.KG_DB_PATH
 
     conn = sqlite3.connect(db_path)
@@ -198,26 +220,30 @@ def create_user(
     tl_weekly: int | None = token_limits.get("weekly") if token_limits else None
     tl_monthly: int | None = token_limits.get("monthly") if token_limits else None
 
-    if tl_daily is not None and not (_TOKEN_LIMIT_DAILY_MIN <= tl_daily <= _TOKEN_LIMIT_DAILY_MAX):
+    if tl_daily is not None and not (
+        _TOKEN_LIMIT_DAILY_MIN <= tl_daily <= _TOKEN_LIMIT_DAILY_MAX
+    ):
         raise ValueError(
             f"token_limits daily={tl_daily} out of bounds "
             f"[{_TOKEN_LIMIT_DAILY_MIN}, {_TOKEN_LIMIT_DAILY_MAX}]"
         )
-    if tl_weekly is not None and not (_TOKEN_LIMIT_WEEKLY_MIN <= tl_weekly <= _TOKEN_LIMIT_WEEKLY_MAX):
+    if tl_weekly is not None and not (
+        _TOKEN_LIMIT_WEEKLY_MIN <= tl_weekly <= _TOKEN_LIMIT_WEEKLY_MAX
+    ):
         raise ValueError(
             f"token_limits weekly={tl_weekly} out of bounds "
             f"[{_TOKEN_LIMIT_WEEKLY_MIN}, {_TOKEN_LIMIT_WEEKLY_MAX}]"
         )
-    if tl_monthly is not None and not (_TOKEN_LIMIT_MONTHLY_MIN <= tl_monthly <= _TOKEN_LIMIT_MONTHLY_MAX):
+    if tl_monthly is not None and not (
+        _TOKEN_LIMIT_MONTHLY_MIN <= tl_monthly <= _TOKEN_LIMIT_MONTHLY_MAX
+    ):
         raise ValueError(
             f"token_limits monthly={tl_monthly} out of bounds "
             f"[{_TOKEN_LIMIT_MONTHLY_MIN}, {_TOKEN_LIMIT_MONTHLY_MAX}]"
         )
 
     ts = _now_iso()
-    scopes_json: str = (
-        json.dumps(scopes) if scopes else json.dumps(["read"])
-    )
+    scopes_json: str = json.dumps(scopes) if scopes else json.dumps(["read"])
     conn = init_db()
 
     conn.execute(
@@ -288,9 +314,7 @@ def get_user_by_key_id(key_id: str) -> dict[str, Any] | None:
         User dict or None if not found.
     """
     conn = init_db()
-    row = conn.execute(
-        "SELECT * FROM users WHERE key_id = ?", (key_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM users WHERE key_id = ?", (key_id,)).fetchone()
     if row is None:
         return None
     return _row_to_dict(row)
@@ -306,9 +330,7 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
         User dict or None if not found.
     """
     conn = init_db()
-    row = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:
         return None
     return _row_to_dict(row)
@@ -386,9 +408,7 @@ def update_user(user_id: str, **kwargs: Any) -> dict[str, Any]:
     """
     conn = init_db()
 
-    existing = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if existing is None:
         raise ValueError(f"user_id={user_id} not found")
 
@@ -431,17 +451,23 @@ def update_user(user_id: str, **kwargs: Any) -> dict[str, Any]:
         weekly = tl.get("weekly", existing["token_limits_weekly"])
         monthly = tl.get("monthly", existing["token_limits_monthly"])
 
-        if daily is not None and not (_TOKEN_LIMIT_DAILY_MIN <= daily <= _TOKEN_LIMIT_DAILY_MAX):
+        if daily is not None and not (
+            _TOKEN_LIMIT_DAILY_MIN <= daily <= _TOKEN_LIMIT_DAILY_MAX
+        ):
             raise ValueError(
                 f"token_limits daily={daily} out of bounds "
                 f"[{_TOKEN_LIMIT_DAILY_MIN}, {_TOKEN_LIMIT_DAILY_MAX}]"
             )
-        if weekly is not None and not (_TOKEN_LIMIT_WEEKLY_MIN <= weekly <= _TOKEN_LIMIT_WEEKLY_MAX):
+        if weekly is not None and not (
+            _TOKEN_LIMIT_WEEKLY_MIN <= weekly <= _TOKEN_LIMIT_WEEKLY_MAX
+        ):
             raise ValueError(
                 f"token_limits weekly={weekly} out of bounds "
                 f"[{_TOKEN_LIMIT_WEEKLY_MIN}, {_TOKEN_LIMIT_WEEKLY_MAX}]"
             )
-        if monthly is not None and not (_TOKEN_LIMIT_MONTHLY_MIN <= monthly <= _TOKEN_LIMIT_MONTHLY_MAX):
+        if monthly is not None and not (
+            _TOKEN_LIMIT_MONTHLY_MIN <= monthly <= _TOKEN_LIMIT_MONTHLY_MAX
+        ):
             raise ValueError(
                 f"token_limits monthly={monthly} out of bounds "
                 f"[{_TOKEN_LIMIT_MONTHLY_MIN}, {_TOKEN_LIMIT_MONTHLY_MAX}]"
@@ -475,14 +501,12 @@ def update_user(user_id: str, **kwargs: Any) -> dict[str, Any]:
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  # nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()
 
-    updated = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
     logger.info(
         "user_store_user_updated",
@@ -507,9 +531,7 @@ def revoke_user(user_id: str) -> dict[str, Any]:
     """
     conn = init_db()
 
-    existing = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if existing is None:
         raise ValueError(f"user_id={user_id} not found")
 
@@ -520,9 +542,7 @@ def revoke_user(user_id: str) -> dict[str, Any]:
     )
     conn.commit()
 
-    updated = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
     logger.info("user_store_user_revoked", user_id=user_id)
 
@@ -549,15 +569,15 @@ def rotate_key(
     """
     conn = init_db()
 
-    existing = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if existing is None:
         raise ValueError(f"user_id={user_id} not found")
 
     old_key_id: str = existing["key_id"]
     new_key_version: int = existing["key_version"] + 1
-    effective_new_key_id: str = new_key_id if new_key_id else f"key_{uuid.uuid4().hex[:12]}"
+    effective_new_key_id: str = (
+        new_key_id if new_key_id else f"key_{uuid.uuid4().hex[:12]}"
+    )
     ts = _now_iso()
 
     conn.execute(
@@ -605,9 +625,7 @@ def update_rate_limits(
     """
     conn = init_db()
 
-    existing = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if existing is None:
         raise ValueError(f"user_id={user_id} not found")
 
@@ -645,14 +663,12 @@ def update_rate_limits(
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  # nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()
 
-    updated = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
     logger.info(
         "user_store_rate_limits_updated",
@@ -687,9 +703,7 @@ def update_token_limits(
     """
     conn = init_db()
 
-    existing = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if existing is None:
         raise ValueError(f"user_id={user_id} not found")
 
@@ -727,14 +741,12 @@ def update_token_limits(
     values = list(updates.values()) + [ts, user_id]
 
     conn.execute(
-        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  #nosec B608 — set_clause keys from validated kwargs
+        f"UPDATE users SET {set_clause}, updated_at = ? WHERE id = ?",  # nosec B608 — set_clause keys from validated kwargs
         values,
     )
     conn.commit()
 
-    updated = conn.execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    updated = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
     logger.info(
         "user_store_token_limits_updated",
@@ -769,7 +781,10 @@ def get_rate_limit_snapshots(user_id: str) -> dict[str, Any]:
         if row is None:
             snapshots[tier] = {"count": 0, "last_updated": None}
         else:
-            snapshots[tier] = {"count": row["count"], "last_updated": row["last_updated"]}
+            snapshots[tier] = {
+                "count": row["count"],
+                "last_updated": row["last_updated"],
+            }
 
     return snapshots
 

@@ -5,12 +5,27 @@ from typing import TYPE_CHECKING, Literal, Optional
 if TYPE_CHECKING:
     pass
 
+from app.core.config import Settings
 from app.core.logging import get_logger
 from app.models.search import SearchRequest
 from app.services.output_formatter import OutputFormatter
 from app.services.search_service import SearchService
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
 
 
 async def search(
@@ -51,10 +66,9 @@ async def search(
     Returns:
         Dictionary with search results (json format) or markdown string (markdown format)
     """
-    from app.core.config import Settings
     from app.core.dependencies import get_redis
 
-    settings = Settings()
+    settings = _get_settings()
     redis_client = get_redis(settings.REDIS_URL)
     # Initialize Redis connection before use (only if not already connected)
     if not hasattr(redis_client, "_client") or redis_client._client is None:

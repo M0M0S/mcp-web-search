@@ -17,23 +17,50 @@ import structlog
 
 from app.core.config import Settings
 from app.core.encryption import encrypt_key, generate_api_key
-from app.core.rate_limiter import check_rate_limit, _get_pool as _rl_get_pool
+from app.core.logging import get_logger
+from app.core.rate_limiter import _get_pool as _rl_get_pool
+from app.core.rate_limiter import check_rate_limit
+from app.core.token_cost_tracker import (
+    _get_pool as _tc_get_pool,
+)
 from app.core.token_cost_tracker import (
     check_token_limits,
     get_token_usage,
-    _get_pool as _tc_get_pool,
 )
 from app.core.user_store import (
     create_user as _store_create_user,
+)
+from app.core.user_store import (
     list_users as _store_list_users,
+)
+from app.core.user_store import (
     revoke_user as _store_revoke_user,
+)
+from app.core.user_store import (
     rotate_key as _store_rotate_key,
+)
+from app.core.user_store import (
     update_rate_limits as _store_update_rate_limits,
+)
+from app.core.user_store import (
     update_token_limits as _store_update_token_limits,
 )
-from app.core.logging import get_logger
 
 logger: structlog.BoundLogger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
 
 # ---------------------------------------------------------------------------
 # Bounds validation constants
@@ -202,14 +229,14 @@ async def revoke_user(user_id: str) -> dict[str, Any]:
 
     # Delete Redis rate-limit counters for this user (pattern-based — all tiers)
     try:
-        rl_pool = _rl_get_pool(Settings())
+        rl_pool = _rl_get_pool(_get_settings())
         rl_pool.delete(f"rl:{user_id}:*")  # type: ignore[union-attr]
     except Exception:
         logger.warning("redis_rate_counters_clear_failed", user_id=user_id)
 
     # Delete Redis token-cost counters for this user (pattern-based — all tiers, both suffixes)
     try:
-        tc_pool = _tc_get_pool(Settings())
+        tc_pool = _tc_get_pool(_get_settings())
         tc_pool.delete(f"tc:{user_id}:*")  # type: ignore[union-attr]
     except Exception:
         logger.warning("redis_token_counters_clear_failed", user_id=user_id)
@@ -258,14 +285,14 @@ async def rotate_key(user_id: str) -> dict[str, Any]:
     # Delete Redis rate-limit counters for this user (pattern-based — all tiers)
     # Redis keys indexed by user_id, not key_id — user_id unchanged during rotation
     try:
-        rl_pool = _rl_get_pool(Settings())
+        rl_pool = _rl_get_pool(_get_settings())
         rl_pool.delete(f"rl:{user_id}:*")  # type: ignore[union-attr]
     except Exception:
         logger.warning("redis_rate_counters_clear_failed", user_id=user_id)
 
     # Delete Redis token-cost counters for this user (pattern-based — all tiers, both suffixes)
     try:
-        tc_pool = _tc_get_pool(Settings())
+        tc_pool = _tc_get_pool(_get_settings())
         tc_pool.delete(f"tc:{user_id}:*")  # type: ignore[union-attr]
     except Exception:
         logger.warning("redis_token_counters_clear_failed", user_id=user_id)

@@ -1,13 +1,28 @@
 """Main entry point - FastMCP server."""
 
+from contextlib import asynccontextmanager
+
 from fastmcp import FastMCP
 
 from app.core.config import Settings
 from app.core.logging import get_logger, setup_logging
-from app.tools import content, search, webfetch, register_user_manage_tools
 
-settings = Settings()
-setup_logging(settings)
+# ---------------------------------------------------------------------------
+# Settings singleton (lazy init, shared across modules)
+# ---------------------------------------------------------------------------
+
+_settings: Settings | None = None
+
+
+def _get_settings() -> Settings:
+    """Return module-level Settings singleton (lazy-init, cached)."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+setup_logging(_get_settings())
 
 logger = get_logger(__name__)
 
@@ -16,10 +31,10 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 auth_provider = None
-if settings.auth_enabled:  # MCP_ENCRYPTION_KEY present and non-empty
+if _get_settings().auth_enabled:  # MCP_ENCRYPTION_KEY present and non-empty
     from fastmcp.server.auth import DebugTokenVerifier, MultiAuth
 
-    from app.core.token_verifier import validate_token, get_admin_key_ids
+    from app.core.token_verifier import validate_token
 
     # Create DebugTokenVerifier with our validate callable
     debug_verifier = DebugTokenVerifier(
@@ -31,14 +46,12 @@ if settings.auth_enabled:  # MCP_ENCRYPTION_KEY present and non-empty
     auth_provider = MultiAuth(verifiers=[debug_verifier])
 
 # ---------------------------------------------------------------------------
-# Shutdown lifecycle handler
+# FastMCP lifespan
 # ---------------------------------------------------------------------------
 
 
-from contextlib import asynccontextmanager
-
-
-async def on_shutdown(server: FastMCP) -> None:
+@asynccontextmanager
+async def lifespan(server: FastMCP):
     """Flush Redis counters to DB on shutdown."""
     from app.core.rate_limiter import flush_counters_to_db
     from app.core.token_cost_tracker import flush_counters_to_db as flush_tokens
@@ -57,16 +70,18 @@ async def on_shutdown(server: FastMCP) -> None:
     except Exception as e:
         logger.error("shutdown_token_costs_flush_failed", extra={"error": str(e)})
 
+    yield
+
 
 # ---------------------------------------------------------------------------
 # FastMCP server with optional auth
 # ---------------------------------------------------------------------------
 
 mcp = FastMCP(
-    name=settings.MCP_NAME,
-    version=settings.MCP_VERSION,
+    name=_get_settings().MCP_NAME,
+    version=_get_settings().MCP_VERSION,
     auth=auth_provider,  # None if no auth enabled
-    lifespan=on_shutdown,  # shutdown lifecycle handler
+    lifespan=lifespan,
 )
 
 
@@ -94,15 +109,24 @@ async def warm_cache_on_startup(settings: Settings) -> None:
 
 def create_app() -> FastMCP:
     """Create and return FastMCP server instance with optional cache warming."""
-    import asyncio
-
     # Warm cache on startup if URLs configured
-    if settings.WARM_CACHE_URLS:
-        asyncio.run(warm_cache_on_startup(settings))
+    if _get_settings().WARM_CACHE_URLS:
+        _warm_cache_sync(_get_settings())
 
     return mcp
 
 
+def _warm_cache_sync(settings: Settings) -> None:
+    """Sync cache warming via new event loop (avoids asyncio.run RuntimeError in nested loops)."""
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(warm_cache_on_startup(settings))
+    finally:
+        loop.close()
+
+
 if __name__ == "__main__":
     # Run FastMCP server with HTTP transport (production)
-    mcp.run(transport="http", host=settings.MCP_HOST)
+    mcp.run(transport="http", host=_get_settings().MCP_HOST)
