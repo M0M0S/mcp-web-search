@@ -37,3 +37,9 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      - id: uv-lock-sync
+        name: uv lock sync
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
