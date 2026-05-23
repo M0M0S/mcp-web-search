@@ -1627,6 +1627,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "bleach" },
+    { name = "cryptography" },
     { name = "ddgs" },
     { name = "fastmcp" },
     { name = "httpx" },
@@ -1656,6 +1657,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.13" },
     { name = "bleach", specifier = ">=6.0" },
+    { name = "cryptography", specifier = ">=3.4" },
     { name = "ddgs", specifier = ">=8.0" },
     { name = "fastmcp", specifier = ">=3.2" },
     { name = "httpx", specifier = ">=0.28" },

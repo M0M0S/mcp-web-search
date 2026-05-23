@@ -137,6 +137,82 @@ class TestMigrateKeysPartialFailure:
         assert result["migrated"] == []
         assert result["failed"] == []
 
+    @patch("app.core.encryption.encrypt_key")
+    @patch("app.core.encryption._get_encryption_key")
+    @patch("app.core.encryption._get_backup_key")
+    def test_migrate_keys_at_exactly_99_percent_boundary_succeeds(
+        self,
+        mock_get_backup: Mock,
+        mock_get_primary: Mock,
+        mock_encrypt: Mock,
+        primary_key: str,
+        backup_key: str,
+    ) -> None:
+        """migrate_keys at exactly 99% success rate should NOT trigger rollback."""
+        from app.core.encryption import migrate_keys
+
+        mock_get_primary.return_value = primary_key
+        mock_get_backup.return_value = backup_key
+
+        # Mock encrypt_key to return a deterministic hex for re-encryption
+        mock_encrypt.side_effect = lambda raw: raw.encode("utf-8").hex()
+
+        # 100 keys, 1 invalid → exactly 99/100 = 0.99 >= 0.99
+        keys: list[dict[str, str]] = []
+        for i in range(99):
+            raw = f"raw_key_{i}"
+            encrypted = _generate_valid_encrypted_key(raw, backup_key)
+            keys.append(_make_key_entry(f"key_id_{i}", encrypted))
+
+        # 1 key that CANNOT be decrypted
+        keys.append(_make_key_entry("key_id_99", "invalid_hex_boundary"))
+
+        result = migrate_keys(backup_key, keys)
+
+        assert result["success_rate"] == pytest.approx(0.99, abs=1e-9)
+        assert len(result["migrated"]) == 99
+        assert len(result["failed"]) == 1
+
+    @patch("app.core.encryption.encrypt_key")
+    @patch("app.core.encryption._get_encryption_key")
+    @patch("app.core.encryption._get_backup_key")
+    def test_migrate_keys_at_98_point_9_percent_boundary_fails(
+        self,
+        mock_get_backup: Mock,
+        mock_get_primary: Mock,
+        mock_encrypt: Mock,
+        primary_key: str,
+        backup_key: str,
+    ) -> None:
+        """migrate_keys at 98.9% success rate should trigger rollback."""
+        from app.core.encryption import migrate_keys
+
+        mock_get_primary.return_value = primary_key
+        mock_get_backup.return_value = backup_key
+
+        # Mock encrypt_key to return a deterministic hex for re-encryption
+        mock_encrypt.side_effect = lambda raw: raw.encode("utf-8").hex()
+
+        # 200 keys, 2 invalid → 198/200 = 0.99 (still passes)
+        # Need 197/200 = 0.985 for clear fail, or 197/198 ≈ 0.9899
+        # Use 100 keys, 2 invalid → 98/100 = 0.98 < 0.99
+        keys: list[dict[str, str]] = []
+        for i in range(98):
+            raw = f"raw_key_{i}"
+            encrypted = _generate_valid_encrypted_key(raw, backup_key)
+            keys.append(_make_key_entry(f"key_id_{i}", encrypted))
+
+        # 2 keys that CANNOT be decrypted
+        keys.append(_make_key_entry("key_id_98", "invalid_hex_boundary"))
+        keys.append(_make_key_entry("key_id_99", "invalid_hex_boundary"))
+
+        result = migrate_keys(backup_key, keys)
+
+        assert result["success_rate"] < 0.99
+        assert result["success_rate"] == pytest.approx(0.98, abs=1e-9)
+        assert len(result["migrated"]) == 98
+        assert len(result["failed"]) == 2
+
 
 class TestVerifyAllDetectsMigrationNeeded:
     """Tests for verify_all detecting migration_needed keys."""

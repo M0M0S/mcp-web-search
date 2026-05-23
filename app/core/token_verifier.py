@@ -189,6 +189,12 @@ def verify_token(token: str) -> AccessToken | None:
         8. Check token cost limits (informational only)
         9. Return AccessToken or None
 
+    FastMCP compatibility:
+        - DebugTokenVerifier accepts sync callables via inspect.isawaitable detection
+        - validate_token wrapper uses verify_token internally
+        - TokenVerifierProtocol requires async verify_token for direct subclass use
+        - Current use case: DebugTokenVerifier(validate=validate_token) — sync OK
+
     Args:
         token: The token string to verify.
 
