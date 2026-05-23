@@ -7,7 +7,9 @@ both rate-limit and token-cost counters.
 
 from __future__ import annotations
 
-from typing import Any
+import sqlite3
+import tempfile
+from typing import Generator
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -75,9 +77,9 @@ class TestFlushCountersToDb:
         self, mock_get_pool: Mock
     ) -> None:
         """flush_counters_to_db handles Redis connection errors gracefully."""
-        from app.core.rate_limiter import flush_counters_to_db
-
         import redis
+
+        from app.core.rate_limiter import flush_counters_to_db
 
         mock_get_pool.side_effect = redis.ConnectionError("connection refused")
 
@@ -214,9 +216,7 @@ class TestMockRedisAndSQLite:
     @pytest.mark.asyncio
     @patch("app.core.token_cost_tracker._get_pool")
     @patch("app.core.token_cost_tracker._redis_available", new=True)
-    async def test_mock_token_flush_with_tc_keys(
-        self, mock_get_pool: Mock
-    ) -> None:
+    async def test_mock_token_flush_with_tc_keys(self, mock_get_pool: Mock) -> None:
         """Token flush should handle tc:* keys correctly."""
         from app.core.token_cost_tracker import flush_counters_to_db
 
@@ -235,3 +235,109 @@ class TestMockRedisAndSQLite:
         result = await flush_counters_to_db()
         assert result["synced"] == 0
         assert result["failed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# 10. Shutdown flush token-cost counters — actual DB writes
+# ---------------------------------------------------------------------------
+
+
+class TestShutdownFlushTokenCounters:
+    """Verify flush_counters_to_db writes token-cost counters to DB during shutdown."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_schema(self) -> Generator[None, None, None]:
+        """Ensure token_cost_snapshots table exists."""
+        from app.core.user_store import init_db
+
+        init_db()
+        yield
+
+    @pytest.mark.asyncio
+    async def test_shutdown_flush_token_counters_writes_to_db(
+        self, shared_db_path: str
+    ) -> None:
+        """flush_counters_to_db writes tc:* counters to token_cost_snapshots during shutdown."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+        from unittest.mock import AsyncMock, MagicMock
+
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_async_pool = None
+
+        mock_pool: MagicMock = MagicMock()
+
+        async def _scan_side_effect(
+            cursor: int, match: str, count: int
+        ) -> tuple[int, list[str]]:
+            if cursor == 0:
+                return (
+                    100,
+                    [
+                        "tc:shutdown_user:daily:input",
+                        "tc:shutdown_user:daily:output",
+                        "tc:shutdown_user:weekly:input",
+                    ],
+                )
+            return (0, [])
+
+        mock_pool.scan = AsyncMock(side_effect=_scan_side_effect)
+
+        async def _get_side_effect(key: str) -> int | None:
+            if key == "tc:shutdown_user:daily:input":
+                return 1500
+            if key == "tc:shutdown_user:daily:output":
+                return 750
+            return None
+
+        mock_pool.get = AsyncMock(side_effect=_get_side_effect)
+
+        with patch.object(
+            token_cost_tracker,
+            "_get_async_pool",
+            return_value=mock_pool,  # type: ignore[arg-type]
+        ):
+            result = await flush_counters_to_db()
+
+        assert result["synced"] == 3
+        assert result["failed"] == 0
+
+        # Verify DB writes — each tc:* key produces a snapshot row
+        conn: sqlite3.Connection = sqlite3.connect(shared_db_path)
+        try:
+            conn.row_factory = sqlite3.Row
+
+            daily_row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
+                "WHERE user_id = ? AND tier = ?",
+                ("shutdown_user", "daily"),
+            ).fetchone()
+            assert daily_row is not None
+            assert daily_row["input_tokens"] == 1500
+            assert daily_row["output_tokens"] == 750
+
+            weekly_row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
+                "WHERE user_id = ? AND tier = ?",
+                ("shutdown_user", "weekly"),
+            ).fetchone()
+            assert weekly_row is not None
+            assert weekly_row["input_tokens"] == 0  # counterpart output key absent → 0
+            assert weekly_row["output_tokens"] == 0
+
+        finally:
+            conn.close()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_flush_token_counters_noop_when_redis_down(
+        self, shared_db_path: str
+    ) -> None:
+        """flush_counters_to_db returns zero when Redis unavailable — no DB writes."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+
+        token_cost_tracker._redis_available = False
+
+        result = await flush_counters_to_db()
+
+        assert result == {"synced": 0, "failed": 0}

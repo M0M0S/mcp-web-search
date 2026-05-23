@@ -789,9 +789,96 @@ class TestRecordTokensRedisPath:
         """record_tokens Redis failure → ``_redis_available`` = False."""
         mock_redis_pool.incrby.side_effect = redis.ConnectionError("connection lost")  # type: ignore[assignment]
 
-        from app.core import token_cost_tracker
-        from app.core.token_cost_tracker import record_tokens
-
         record_tokens("fail_user", "daily", input_tokens=100, output_tokens=50)
 
         assert token_cost_tracker._redis_available is False
+
+
+# ---------------------------------------------------------------------------
+# 11. Backup key independence — token_cost_tracker does not use encryption keys
+# ---------------------------------------------------------------------------
+
+
+class TestBackupKeyIndependence:
+    """Verify backup key does not affect token_cost_tracker path."""
+
+    def test_backup_key_does_not_affect_redis_available(
+        self,
+        mcp_encryption_key_backup: str,
+        mock_redis_pool: Generator[None, None, None],
+    ) -> None:
+        """Setting a backup encryption key does not change ``_redis_available``."""
+        from app.core import token_cost_tracker
+
+        # Reset module state — backup key fixture does not touch token_cost_tracker
+        token_cost_tracker._redis_available = True
+        token_cost_tracker._redis_pool = None
+
+        # Backup key is set via fixture — token_cost_tracker should be unaware
+        assert token_cost_tracker._redis_available is True
+
+        # Verify counters work normally
+        from app.core.token_cost_tracker import get_token_usage
+
+        def _get_side_effect(key: str) -> int | None:
+            if "bk_user" in key and "input" in key:
+                return 300
+            if "bk_user" in key and "output" in key:
+                return 150
+            return None
+
+        mock_redis_pool.get.side_effect = _get_side_effect
+
+        usage = get_token_usage("bk_user", "daily")
+
+        assert usage["input_tokens"] == 300
+        assert usage["output_tokens"] == 150
+        assert token_cost_tracker._redis_available is True
+
+    def test_counters_independent_of_encryption_key_state(
+        self,
+        mcp_encryption_key: str,
+        mcp_encryption_key_backup: str,
+        force_db_fallback_token_cost_tracker: None,
+        shared_db: sqlite3.Connection,
+    ) -> None:
+        """Token counters work correctly via DB fallback regardless of encryption key presence."""
+        from app.core.token_cost_tracker import record_tokens, get_token_usage
+
+        # Both encryption keys are set via fixtures — token_cost_tracker should ignore them
+        record_tokens("bk_indep_user", "daily", input_tokens=400, output_tokens=200)
+
+        usage = get_token_usage("bk_indep_user", "daily")
+
+        # DB fallback path — counters reflect recorded values (Redis forced unavailable)
+        assert usage["input_tokens"] == 400
+        assert usage["output_tokens"] == 200
+        assert usage["total_tokens"] == 600
+
+        # Verify DB has the recorded values
+        row = shared_db.execute(
+            "SELECT input_tokens, output_tokens FROM token_cost_snapshots "
+            "WHERE user_id = ? AND tier = ?",
+            ("bk_indep_user", "daily"),
+        ).fetchone()
+
+        assert row is not None
+        assert row[0] == 400
+        assert row[1] == 200
+
+    @pytest.mark.asyncio
+    async def test_flush_counters_noop_with_backup_key_present(
+        self,
+        mcp_encryption_key_backup: str,
+        force_db_fallback_token_cost_tracker: None,
+    ) -> None:
+        """flush_counters_to_db returns zero when Redis unavailable — backup key present."""
+        from app.core import token_cost_tracker
+        from app.core.token_cost_tracker import flush_counters_to_db
+
+        # Backup key set via fixture — should not interfere
+        assert token_cost_tracker._redis_available is False
+
+        result = await flush_counters_to_db()
+
+        assert result == {"synced": 0, "failed": 0}
