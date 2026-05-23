@@ -241,12 +241,17 @@ class TestMockRedisAndSQLite:
 
 
 # ---------------------------------------------------------------------------
-# 10. Shutdown flush token-cost counters — actual DB writes
+# Shutdown-specific token-cost flush tests (lifespan lifecycle path)
 # ---------------------------------------------------------------------------
 
 
 class TestShutdownFlushTokenCounters:
-    """Verify flush_counters_to_db writes token-cost counters to DB during shutdown."""
+    """Tests token-cost flush triggered by shutdown lifecycle handler.
+
+    Scope: shutdown-specific scenarios — verifies that flush_counters_to_db
+    writes tc:* counters to DB when invoked from the lifespan shutdown path,
+    and that it gracefully returns zero when Redis is down.
+    """
 
     @pytest.fixture(autouse=True)
     def _ensure_schema(self, shared_db_path: str) -> Generator[None, None, None]:
@@ -264,7 +269,7 @@ class TestShutdownFlushTokenCounters:
     async def test_shutdown_flush_token_counters_writes_to_db(
         self, shared_db_path: str
     ) -> None:
-        """flush_counters_to_db writes tc:* counters to token_cost_snapshots during shutdown."""
+        """Shutdown flush writes tc:* counters to token_cost_snapshots DB."""
         from app.core import token_cost_tracker
         from app.core.token_cost_tracker import flush_counters_to_db
         from unittest.mock import AsyncMock, MagicMock
@@ -339,7 +344,7 @@ class TestShutdownFlushTokenCounters:
     async def test_shutdown_flush_token_counters_noop_when_redis_down(
         self, shared_db_path: str
     ) -> None:
-        """flush_counters_to_db returns zero when Redis unavailable — no DB writes."""
+        """Shutdown flush returns zero when Redis unavailable — no DB writes."""
         from app.core import token_cost_tracker
         from app.core.token_cost_tracker import flush_counters_to_db
 
@@ -351,14 +356,16 @@ class TestShutdownFlushTokenCounters:
 
 
 # ---------------------------------------------------------------------------
-# Consolidated flush_counters_to_db tests (token-cost path)
+# General flush_counters_to_db tests (token-cost path — standalone flush)
 # ---------------------------------------------------------------------------
 
 
 class TestFlushTokenCountersToDb:
-    """flush_counters_to_db — async scan + DB upsert (token-cost tc:* keys).
+    """Tests general flush_counters_to_db functionality (scan, parsing, upsert).
 
-    Consolidated from test_token_cost_tracker.py for better organisation.
+    Scope: standalone flush path — verifies Redis tc:* key scanning, counter
+    parsing, DB upsert logic, and edge cases (malformed keys, Redis down).
+    Does NOT test shutdown lifecycle integration.
     """
 
     @pytest.fixture(autouse=True)
