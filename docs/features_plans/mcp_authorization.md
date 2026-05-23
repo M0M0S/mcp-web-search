@@ -373,30 +373,30 @@ New MCP tool `user_manage` with scopes `admin`:
 
 ## Judge Evaluation — 2026-05-23 (Final v4)
 
-**Score: 96% — ПРОЙДЕНО ✅**
+**Score: 96% — PASSED ✅**
 
-### Завершённые issues (все resolved):
-1. ✅ encrypted_key storage в DB — fixed
-2. ✅ rotate_key key_id update в DB — fixed
+### Completed issues (all resolved):
+1. ✅ encrypted_key storage in DB — fixed
+2. ✅ rotate_key key_id update in DB — fixed
 3. ✅ Phase 6 documentation — completed (README.md, SECURITY.md)
 4. ✅ Plan file acceptance criteria checkboxes — updated to [x]
 5. ✅ auth_provider naming conflict — DefaultAuthProvider → PlaceholderAuthClient
 6. ✅ Test mock Redis scan API — pattern → match keyword
-7. ✅ Type ignores reduced — 24 → 3 в token_cost_tracker.py
+7. ✅ Type ignores reduced — 24 → 3 in token_cost_tracker.py
 8. ✅ Documentation depth — migration walkthrough + audit log examples added
 9. ✅ Test count verified — 865 total (244 auth-specific)
 10. ✅ cryptography dependency — added to pyproject.toml
 11. ✅ verify_token async compatibility — verified: sync acceptable (FastMCP DebugTokenVerifier via inspect.isawaitable)
 12. ✅ backup key 99% boundary test — added 2 boundary tests (99% succeeds, 98.9% fails)
-13. ✅ optional tests — documented как explicitly excluded (7 items с rationale)
+13. ✅ optional tests — documented as explicitly excluded (7 items with rationale)
 
-### Сильные стороны:
-- Test coverage: 865 tests (244 auth-specific) + boundary tests — comprehensive и all passing
+### Strengths:
+- Test coverage: 865 tests (244 auth-specific) + boundary tests — comprehensive and all passing
 - FastMCP API verified: sync validate callable compatibility confirmed via inspect.isawaitable
 - Design boundary clarity: token limits = soft warnings, rate limits = hard blocks — explicitly documented
 - Security design solid: Fernet encryption, env-only keys, constant-time comparison, bandit 0 errors
 - Correctness 5/5, Completeness 5/5, Coherence 5/5, Safety 5/5, Instruction Following 5/5
-- Все 16 acceptance criteria [x]
+- All 16 acceptance criteria [x]
 
 ## Optional Tests — Explicitly Excluded
 

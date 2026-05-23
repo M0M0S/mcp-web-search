@@ -1,5 +1,5 @@
 #!/bin/bash
-# Скрипт автогенерации .env из .env.example при первом запуске
+# Auto-generates .env from .env.example on first run
 
 set -e
 
@@ -9,44 +9,44 @@ PROJECT_ROOT="${SCRIPT_DIR}/../.."
 ENV_FILE="${PROJECT_ROOT}/.env"
 EXAMPLE_ENV_FILE="${PROJECT_ROOT}/.env.example"
 
-# Если .env уже существует, ничего не делаем
+# If .env already exists, skip generation
 if [ -f "$ENV_FILE" ]; then
-    echo ".env файл уже существует. Пропускаем генерацию."
+    echo ".env file already exists. Skipping generation."
     exit 0
 fi
 
-# Если .env.example отсутствует, выводим ошибку
+# If .env.example is missing, exit with error
 if [ ! -f "$EXAMPLE_ENV_FILE" ]; then
-    echo "ОШИБКА: Файл .env.example не найден!"
+    echo "ERROR: .env.example file not found!"
     exit 1
 fi
 
-# Копируем .env.example в .env
+# Copy .env.example to .env
 cp "$EXAMPLE_ENV_FILE" "$ENV_FILE"
 
-# В Docker контейнерах REDIS_HOST должен быть 'redis' (имя сервиса)
+# In Docker containers, REDIS_HOST should be 'redis' (service name)
 if grep -q "^REDIS_HOST=" "$ENV_FILE"; then
     sed -i.bak "s|^REDIS_HOST=.*|REDIS_HOST=redis|" "$ENV_FILE"
     rm -f "${ENV_FILE}.bak"
 fi
 
-# Генерация сложного токена API_KEY если он пустой или содержит значение по умолчанию
+# Generate a strong API_KEY if it is empty or contains the default value
 API_KEY_LINE=$(grep "^API_KEY=" "$ENV_FILE")
 CURRENT_VALUE="${API_KEY_LINE#*=}"
-# Удаляем комментарии и пробелы из значения
+# Remove comments and spaces from the value
 CLEAN_VALUE=$(echo "$CURRENT_VALUE" | sed 's/#.*//' | tr -d ' ')
 
 if [ -z "$CLEAN_VALUE" ] || [ "$CLEAN_VALUE" = "local_dev_token" ]; then
-    # Генерируем сложный токен: 32 символа (буквы, цифры, спецсимволы)
+    # Generate a strong token: 32 characters (letters, digits, special chars)
     NEW_API_KEY=$(openssl rand -base64 32 | tr -d '\n' | cut -c1-32)
     sed -i.bak "s|^API_KEY=.*|API_KEY=${NEW_API_KEY}|" "$ENV_FILE"
     rm -f "${ENV_FILE}.bak"
-    
-    echo "API_KEY успешно сгенерирован: ${NEW_API_KEY}"
+
+    echo "API_KEY successfully generated"
 fi
 
-echo ".env файл успешно создан из .env.example"
-echo "Расположение: $ENV_FILE"
+echo ".env file successfully created from .env.example"
+echo "Location: $ENV_FILE"
 echo ""
-echo "Пожалуйста, проверьте и при необходимости измените настройки в .env"
+echo "Please review and adjust settings in .env as needed"
 

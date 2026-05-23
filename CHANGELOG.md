@@ -5,19 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [1.1.0] - 2026-05-23
 
 ### Added
-- **MCP Authorization System** — полный набор модулей авторизации:
-  - `encryption` — шифрование/дешифрование ключей (AES-GCM, Fernet)
-  - `user_store` — управление пользователями и API ключами (Redis)
-  - `rate_limiter` — rate limiting по пользователям (Redis sliding window)
-  - `token_cost_tracker` — трекинг token cost на запрос
-  - `token_verifier` — верификация токенов с fallback на backup key
+- **MCP Authorization System** — full set of authorization modules:
+  - `encryption` — key encryption/decryption (AES-GCM, Fernet)
+  - `user_store` — user and API key management (Redis)
+  - `rate_limiter` — per-user rate limiting (Redis sliding window)
+  - `token_cost_tracker` — per-request token cost tracking
+  - `token_verifier` — token verification with backup key fallback
   - `user_manage` — MCP tools: `create_user`, `delete_user`, `list_users`, `rotate_key`
-- **Auth test suite** — 11 тестовых файлов, 246 тестов (backward compat, shutdown flush, backup key, admin scope, FastMCP API)
-- **Документация**: README.md (auth section), SECURITY.md (auth policy)
+- **Auth test suite** — 11 test files, 246 tests (backward compat, shutdown flush, backup key, admin scope, FastMCP API)
+- **Documentation**: README.md (auth section), SECURITY.md (auth policy)
 
 ### Fixed
-- `encrypted_key` storage — корректное сохранение зашифрованного ключа в Redis
-- `rotate_key` — корректное обновление `key_id` при ротации
+- `encrypted_key` storage — correct encrypted key storage in Redis
+- `rotate_key` — correct `key_id` update during rotation
 
 ### Security
 - Bandit: 0 High, 0 Medium
@@ -29,7 +29,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.3] - 2026-05-22
 
 ### Changed
-- PyPI long description: added `readme = "README.md"` в `pyproject.toml`
+- PyPI long description: added `readme = "README.md"` to `pyproject.toml`
 
 ---
 
@@ -43,13 +43,13 @@ All notable changes to this project will be documented in this file.
 ## [1.0.1] - 2026-05-22
 
 ### Fixed
-- **CI stabilization:** resolve mypy errors (missing type stubs) и test failures (LLM_API_KEY dependency)
-- WebFetchService/SearchService: optional `llm_client` parameter для test injection
-- TavilyClient: lazy import вместо module-level для mypy `import-untyped`
-- content_service: rationale comments для `# type: ignore[import-untyped]` (bleach, readability)
-- provider_registry: rationale comment для `# type: ignore[import-untyped]` (tavily)
-- tests: shared `mock_llm_client` fixture в `fixtures.py` + patch при usage site
-- test_provider_health: correct patch target для lazy import TavilyClient (`tavily.TavilyClient`)
+- **CI stabilization:** resolve mypy errors (missing type stubs) and test failures (LLM_API_KEY dependency)
+- WebFetchService/SearchService: optional `llm_client` parameter for test injection
+- TavilyClient: lazy import instead of module-level for mypy `import-untyped`
+- content_service: rationale comments for `# type: ignore[import-untyped]` (bleach, readability)
+- provider_registry: rationale comment for `# type: ignore[import-untyped]` (tavily)
+- tests: shared `mock_llm_client` fixture in `fixtures.py` + patch at usage site
+- test_provider_health: correct patch target for lazy import TavilyClient (`tavily.TavilyClient`)
 - README.md: update GitHub username
 
 ---

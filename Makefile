@@ -1,53 +1,53 @@
 .PHONY: run dev fmt lint test unit-tests integration-tests full-test type-check security-check openapi pre-commit-install install version version-bump version-sync version-check docker-build docker-rebuild docker-push help
 
-install: ## Установить зависимости
+install: ## Install dependencies
 	uv install
 
-dev: ## Запустить в режиме разработки (auto-reload)
+dev: ## Run in development mode (auto-reload)
 	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 
-run: ## Запустить production сервер
+run: ## Run production server
 	uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 4
 
 # =============================================================================
 # Docker commands
 # =============================================================================
 
-docker-build: ## Собрать Docker образ
+docker-build: ## Build Docker image
 	docker build -t mcp-webs:latest -f docker/Dockerfile .
 
-docker-rebuild: ## Пересобрать начисто
+docker-rebuild: ## Rebuild from scratch
 	docker compose -f docker/docker-compose.dev.yml down & docker compose -f docker/docker-compose.dev.yml up -d --build
 
-docker-push: ## Отправить Docker образ в registry
+docker-push: ## Push Docker image to registry
 	docker push mcp-webs:latest
 
-docker-setup-env: ## Настроить .env файл для development режима
+docker-setup-env: ## Set up .env file for development mode
 	./docker/scripts/setup-env.sh
 
-docker-up: ## Запустить контейнеры (создает .env если нет)
-	@echo "=== Проверка .env файла ==="
+docker-up: ## Start containers (creates .env if missing)
+	@echo "=== Checking .env file ==="
 	@if [ ! -f ".env" ]; then \
-		echo ".env не найден. Создание из .env.example..."; \
+		echo ".env not found. Creating from .env.example..."; \
 		./docker/scripts/setup-env.sh; \
 	else \
-		echo ".env файл уже существует."; \
+		echo ".env file already exists."; \
 	fi
 	@echo ""
 	docker-compose -f docker/docker-compose.dev.yml up --build
 
-docker-down: ## Остановить контейнеры
+docker-down: ## Stop containers
 	docker-compose -f docker/docker-compose.dev.yml down
 
 # =============================================================================
 # Format commands
 # =============================================================================
 
-fmt: ## Форматировать код
+fmt: ## Format code
 	uv run ruff check --fix .
 	uv run ruff format .
 
-lint: ## Запустить линтеры
+lint: ## Run linters
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy app/ --ignore-missing-imports --explicit-package-bases
@@ -56,37 +56,37 @@ lint: ## Запустить линтеры
 # Unit Tests (fast, isolated, no external dependencies)
 # =============================================================================
 
-unit-tests: ## Запустить юнит-тесты
+unit-tests: ## Run unit tests
 	uv run pytest -v tests/unit/ tests/tdd/
 
-unit-tests-cover: ## Запустить юнит-тесты с покрытием
+unit-tests-cover: ## Run unit tests with coverage
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing tests/unit/ tests/tdd/
 
 # =============================================================================
 # Integration Tests (test full pipeline, require external services)
 # =============================================================================
 
-integration-tests: ## Запустить интеграционные тесты
+integration-tests: ## Run integration tests
 	uv run pytest -v tests/integration/
 
-integration-tests-cover: ## Запустить интеграционные тесты с покрытием
+integration-tests-cover: ## Run integration tests with coverage
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing tests/integration/
 
 # =============================================================================
 # Full Tests (unit + integration)
 # =============================================================================
 
-full-test: ## Запустить все тесты (unit + integration)
+full-test: ## Run all tests (unit + integration)
 	uv run pytest -v
 
-full-test-cover: ## Запустить все тесты с покрытием
+full-test-cover: ## Run all tests with coverage
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing
 
 # =============================================================================
 # Pre-commit Hook
 # =============================================================================
 
-pre-commit-hook: ## Запустить pre-commit проверки (format + security + unit-tests)
+pre-commit-hook: ## Run pre-commit checks (format + security + unit-tests)
 	@echo "=== Running format checks ==="
 	@if uv run ruff check . || uv run ruff format --check .; then \
 		echo "✅ Format checks passed"; \
@@ -114,45 +114,45 @@ pre-commit-hook: ## Запустить pre-commit проверки (format + sec
 # Test and Deploy commands
 # =============================================================================
 
-test: ## Запустить все тесты (alias для full-test)
+test: ## Run all tests (alias for full-test)
 	uv run pytest -v
 
-test-coverage: ## Запустить тесты с покрытием (alias для full-test-cover)
+test-coverage: ## Run tests with coverage (alias for full-test-cover)
 	uv run pytest --cov=app --cov-report=html --cov-report=term-missing
 
-type-check: ## Проверка типов через mypy
+type-check: ## Type checking via mypy
 	uv run mypy app/ --ignore-missing-imports --explicit-package-bases
 
-security-check: ## Проверка безопасности (bandit + pip-audit)
+security-check: ## Security check (bandit + pip-audit)
 	uv run bandit -r app/ -ll
 	uv run pip-audit --format columns
 
-openapi: ## Сгенерировать OpenAPI спецификацию
+openapi: ## Generate OpenAPI specification
 	uv run python docs/templates/scripts/generate_openapi.py \
 		--service-name mcp_internet_search \
 		--app-path app.main:app
 
-pre-commit-install: ## Установить pre-commit хуки
+pre-commit-install: ## Install pre-commit hooks
 	pre-commit install
 
-pre-commit-run: ## Запустить pre-commit проверки
+pre-commit-run: ## Run pre-commit checks
 	pre-commit run --all-files
 
 # Version management
-version: ## Показать текущую версию
+version: ## Show current version
 	@grep '^version = ' pyproject.toml | cut -d'"' -f2
 
-version-bump: ## Поднять версию (TYPE=patch|minor|major)
+version-bump: ## Bump version (TYPE=patch|minor|major)
 	@if [ -z "$(TYPE)" ]; then echo "Usage: make version-bump TYPE=patch|minor|major"; exit 1; fi
 	uv run bump-my-version bump $(TYPE)
 	@echo "Version bumped to $$(make version)"
 	@echo "Don't forget to push the tag: git push origin --tags"
 
-version-sync: ## Синхронизировать версию во всех файлах
+version-sync: ## Sync version across all files
 	uv run python scripts/sync_version.py
 
-version-check: ## Проверить синхронизацию версии
+version-check: ## Check version synchronization
 	uv run python scripts/sync_version.py --check
 
-help: ## Показать эту справку
+help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
